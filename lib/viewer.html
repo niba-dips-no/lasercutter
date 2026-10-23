@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Havsudden — laser-cut contour model</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --ink: #2a2620; --mute: #7a7266; --paper: #f6f2ea; --line: #ddd5c6; --accent: #b0302a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font: 13px/1.4 -apple-system, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--paper); }
+  body { display: grid; grid-template-columns: 330px 1fr; }
+  aside { padding: 16px 16px 24px; overflow-y: auto; border-right: 1px solid var(--line); background: #fbf9f4; }
+  h1 { font-size: 17px; margin: 0 0 2px; }
+  .sub { color: var(--mute); margin: 0 0 14px; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); margin: 18px 0 6px; }
+  #map { width: 100%; display: block; cursor: crosshair; border: 1px solid var(--line); border-radius: 4px; image-rendering: pixelated; }
+  .hint { color: var(--mute); font-size: 11px; margin-top: 4px; }
+  label { display: grid; grid-template-columns: 92px 1fr 64px; align-items: center; gap: 8px; margin: 6px 0; }
+  label output { text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  select { width: 100%; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  td { padding: 3px 0; border-bottom: 1px solid #eee7da; }
+  td:last-child { text-align: right; }
+  .warn { color: var(--accent); }
+  .plates td:first-child { width: 22px; }
+  .sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; border: 1px solid #0003; vertical-align: -1px; }
+  button { font: inherit; padding: 6px 10px; margin: 0 6px 6px 0; border: 1px solid #c9bfae; background: #fff; border-radius: 4px; cursor: pointer; }
+  button:hover { background: #f3eee4; }
+  main { position: relative; overflow: hidden; }
+  #view { position: absolute; inset: 0; }
+  .label3d { font-size: 11px; background: #fffd; padding: 1px 5px; border-radius: 3px; border: 1px solid #0002; white-space: nowrap; pointer-events: none; transform: translateY(-14px); }
+  .corner { position: absolute; left: 12px; bottom: 10px; color: var(--mute); font-size: 11px; pointer-events: none; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<aside>
+  <h1>Havsudden contour model</h1>
+  <p class="sub">Laser-cut plates, stacked and glued. Drag the 3D view to look around.</p>
+
+  <h2>Area</h2>
+  <canvas id="map"></canvas>
+  <div class="hint">Drag on the map to choose the area · drag inside the box to move it.</div>
+  <label style="grid-template-columns: 20px 1fr"><input id="only" type="checkbox"> Peninsula only — cut off at the neck</label>
+  <label style="grid-template-columns: 20px 1fr"><input id="etch" type="checkbox" checked> Etch roads, paths and houses</label>
+
+  <h2>Plates</h2>
+  <label>Land plates <input id="plates" type="range" min="1" max="12" step="1"><output id="platesOut"></output></label>
+  <label>Thickness <input id="thick" type="range" min="2" max="12" step="0.5"><output id="thickOut"></output></label>
+  <label>Scale <select id="scale"></select><output></output></label>
+  <label>Explode <input id="explode" type="range" min="0" max="30" step="1" value="0"><output id="explodeOut"></output></label>
+
+  <h2>Result</h2>
+  <table id="stats"></table>
+
+  <h2>Plates, bottom to top</h2>
+  <table id="plateList" class="plates"></table>
+
+  <h2>Laser — Epilog Fusion Pro</h2>
+  <label>Sheet (mm) <span><input id="bedW" type="number" value="1200" step="10" style="width:64px"> × <input id="bedH" type="number" value="900" step="10" style="width:64px"></span><output></output></label>
+  <table id="laser"></table>
+  <button id="fitOne">Fit everything on one sheet</button>
+  <button id="fitBed">Biggest base plate</button>
+  <div class="hint">The bed is 1200 × 900. Set the sheet to the size of the plywood you buy if it's smaller.</div>
+
+  <h2>Download</h2>
+  <button id="dlBed">Bed sheets 1200 × 900 — true scale</button>
+  <button id="dlSheet">A3 sheet — all plates</button>
+  <button id="dlOverview">A3 overview map</button>
+  <button id="dlPlates">Each plate, true scale</button>
+  <div class="hint">SVG in millimetres. Red = cut · blue = score (outline of the plate above, so you know where it goes) · black = etched roads, paths, houses. Bed sheets use 0.025 mm lines so the Epilog treats them as vectors.</div>
+</aside>
+<main>
+  <div id="view"></div>
+  <div class="corner">Elevation: NLS Finland korkeusmalli 2 m (CC BY 4.0)</div>
+</main>
+
+<script>
+/*__CORE__*/
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const DATA = /*__DATA__*/;
+const { W, H, cellM, places } = DATA;
+const raw = Uint8Array.from(atob(DATA.grid), (c) => c.charCodeAt(0));
+const cm = new Uint16Array(raw.buffer);
+const grid = Float32Array.from(cm, (v) => v / 100);
+
+// The peninsula, cut off at its low neck — everything else can be dropped to sea.
+const land = DATA.seed ? landMask(grid, W, H, DATA.seed[0], DATA.seed[1], { join: DATA.join, sea: 0.5 }) : null;
+const state = { only: !!land && DATA.only, etch: true, rect: { ...DATA.rect }, plates: DATA.plates, thick: DATA.thick, scale: DATA.scale, explode: 0 };
+
+// ------------------------------------------------------------ map
+const map = document.getElementById('map');
+map.width = W; map.height = H;
+const mctx = map.getContext('2d');
+const base = mctx.createImageData(W, H);
+let top = 0;
+for (const v of grid) top = Math.max(top, v);
+for (let k = 0; k < W * H; k++) {
+  const v = grid[k];
+  // simple hillshade from the east–west and north–south slope
+  const i = k % W, j = (k - i) / W;
+  const dx = grid[j * W + Math.min(W - 1, i + 1)] - grid[j * W + Math.max(0, i - 1)];
+  const dy = grid[Math.min(H - 1, j + 1) * W + i] - grid[Math.max(0, j - 1) * W + i];
+  const shade = Math.max(0.55, Math.min(1.15, 1 + (dy - dx) * 0.12));
+  let c;
+  if (v < 0.5) c = [196, 216, 226];
+  else { const t = v / top; c = [180 + 60 * t, 200 + 20 * t, 140 + 70 * t].map((x) => x * shade); }
+  base.data.set([...c, 255], k * 4);
+}
+const masked = new ImageData(new Uint8ClampedArray(base.data), W, H);
+if (land) for (let k = 0; k < W * H; k++) if (!land.mask[k] && grid[k] >= 0.5) masked.data.set([214, 222, 214, 255], k * 4);
+function drawMap() {
+  mctx.putImageData(state.only ? masked : base, 0, 0);
+  const { i0, j0, i1, j1 } = state.rect;
+  mctx.fillStyle = '#0003';
+  mctx.fillRect(0, 0, W, j0); mctx.fillRect(0, j1, W, H - j1);
+  mctx.fillRect(0, j0, i0, j1 - j0); mctx.fillRect(i1, j0, W - i1, j1 - j0);
+  mctx.strokeStyle = '#b0302a'; mctx.lineWidth = 3;
+  mctx.strokeRect(i0, j0, i1 - i0, j1 - j0);
+  mctx.fillStyle = '#b0302a';
+  for (const p of places) { mctx.beginPath(); mctx.arc(p.gi, p.gj, 4, 0, 7); mctx.fill(); }
+}
+const toGrid = (e) => {
+  const r = map.getBoundingClientRect();
+  return [Math.round(((e.clientX - r.left) / r.width) * W), Math.round(((e.clientY - r.top) / r.height) * H)];
+};
+let drag = null;
+map.addEventListener('pointerdown', (e) => {
+  const [i, j] = toGrid(e), r = state.rect;
+  map.setPointerCapture(e.pointerId);
+  drag = i > r.i0 && i < r.i1 && j > r.j0 && j < r.j1 ? { mode: 'move', i, j, r: { ...r } } : { mode: 'draw', i, j };
+});
+map.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const [i, j] = toGrid(e);
+  if (drag.mode === 'move') {
+    const w = drag.r.i1 - drag.r.i0, h = drag.r.j1 - drag.r.j0;
+    const i0 = Math.max(0, Math.min(W - w, drag.r.i0 + i - drag.i)), j0 = Math.max(0, Math.min(H - h, drag.r.j0 + j - drag.j));
+    state.rect = { i0, j0, i1: i0 + w, j1: j0 + h };
+  } else {
+    const c = (v, m) => Math.max(0, Math.min(m, v));
+    state.rect = { i0: c(Math.min(i, drag.i), W), j0: c(Math.min(j, drag.j), H), i1: c(Math.max(i, drag.i), W), j1: c(Math.max(j, drag.j), H) };
+  }
+  drawMap();
+});
+map.addEventListener('pointerup', () => {
+  if (!drag) return;
+  const r = state.rect;
+  if (r.i1 - r.i0 < 8 || r.j1 - r.j0 < 8) state.rect = drag.r ?? { ...DATA.rect };
+  drag = null;
+  drawMap();
+  rebuild(true);
+});
+
+// ------------------------------------------------------------ controls
+const $ = (id) => document.getElementById(id);
+const scaleSel = $('scale');
+for (const s of [...new Set([DATA.scale, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 7000, 8000, 10000])].sort((a, b) => a - b)) scaleSel.add(new Option(`1:${s.toLocaleString('en')}`, s));
+$('plates').value = state.plates; $('thick').value = state.thick; scaleSel.value = state.scale;
+for (const id of ['plates', 'thick', 'explode']) $(id).addEventListener('input', () => { state[id] = +$(id).value; schedule(id === 'plates'); });
+$('only').checked = state.only;
+$('only').disabled = !land;
+$('only').addEventListener('change', () => { state.only = $('only').checked; drawMap(); schedule(true); });
+$('etch').addEventListener('change', () => { state.etch = $('etch').checked; schedule(true); });
+scaleSel.addEventListener('change', () => { state.scale = +scaleSel.value; schedule(true, true); });
+
+let pending = null;
+function schedule(geometry, refit = false) {
+  if (pending) cancelAnimationFrame(pending);
+  pending = requestAnimationFrame(() => { pending = null; geometry ? rebuild(refit) : layout(); });
+}
+
+// ------------------------------------------------------------ 3D
+const view = $('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(devicePixelRatio);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+view.appendChild(renderer.domElement);
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.domElement.style.cssText = 'position:absolute;inset:0;pointer-events:none';
+view.appendChild(labelRenderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#ebe5d9');
+const camera = new THREE.PerspectiveCamera(35, 1, 1, 20000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.49;
+scene.add(new THREE.HemisphereLight('#fff8ee', '#8a7a66', 1.6));
+const sun = new THREE.DirectionalLight('#fff3e0', 2.2);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.bias = -0.0005;
+scene.add(sun, sun.target);
+const table = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ color: '#d8d0c2', roughness: 1 }));
+table.rotation.x = -Math.PI / 2;
+table.receiveShadow = true;
+scene.add(table);
+
+const woodTop = [new THREE.MeshStandardMaterial({ color: '#dcc197', roughness: 0.8 }), new THREE.MeshStandardMaterial({ color: '#d2b585', roughness: 0.8 })];
+const burnt = new THREE.MeshStandardMaterial({ color: '#5b3d24', roughness: 0.9 });
+const etchMat = new THREE.LineBasicMaterial({ color: '#4a2f1a' });
+const model3d = new THREE.Group();
+scene.add(model3d);
+let model = null, sub = null, plates3d = [], etch3d = [];
+
+function cropGrid() {
+  const { i0, j0, i1, j1 } = state.rect;
+  const w = i1 - i0, h = j1 - j0, g = new Float32Array(w * h);
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      const k = (j + j0) * W + i + i0;
+      g[j * w + i] = state.only && !land.mask[k] ? 0 : grid[k];
+    }
+  }
+  return { g, w, h };
+}
+
+function rebuild(refit) {
+  sub = cropGrid();
+  model = buildModel(sub.g, sub.w, sub.h, { cellM, scale: state.scale, sea: 0.5, plates: state.plates, tol: 0.15, minArea: 6,
+    features: state.etch ? DATA.features : null, offset: [state.rect.i0, state.rect.j0] });
+  for (const m of model3d.children.slice()) { m.geometry?.dispose(); model3d.remove(m); }
+  plates3d = [];
+  const { frameW: FW, frameH: FH } = model;
+  // base / sea plate
+  const box = new THREE.Mesh(new THREE.BoxGeometry(FW, 1, FH), [burnt, burnt, woodTop[0], woodTop[0], burnt, burnt]);
+  box.geometry.translate(FW / 2, 0.5, FH / 2);
+  plates3d.push(box);
+  // land plates: shape (x, -y) extruded, then turned so shape-y → world -z, i.e. svg y → world +z
+  model.layers.forEach((lay, k) => {
+    const shapes = lay.pieces.map((p) => {
+      const s = new THREE.Shape(p.outer.pts.map(([x, y]) => new THREE.Vector2(x, -y)));
+      s.holes = p.holes.map((h) => new THREE.Path(h.pts.map(([x, y]) => new THREE.Vector2(x, -y))));
+      return s;
+    });
+    const geo = new THREE.ExtrudeGeometry(shapes, { depth: 1, bevelEnabled: false, curveSegments: 1 });
+    geo.rotateX(-Math.PI / 2);
+    plates3d.push(new THREE.Mesh(geo, [woodTop[(k + 1) % 2], burnt]));
+  });
+  for (const m of plates3d) { m.castShadow = m.receiveShadow = true; model3d.add(m); }
+  // etched detail: line segments lying on each plate's top
+  etch3d = (model.details ?? []).map((d) => {
+    const v = [];
+    const add = (pts, closed) => {
+      for (let k = 1; k < pts.length + (closed ? 1 : 0); k++) {
+        const a = pts[k - 1], b = pts[k % pts.length];
+        v.push(a[0], 0, a[1], b[0], 0, b[1]);
+      }
+    };
+    for (const p of d.roads) add(p, false);
+    for (const p of d.paths) add(p, false);
+    for (const p of d.houses) add(p, true);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+    const lines = new THREE.LineSegments(g, etchMat);
+    model3d.add(lines);
+    return lines;
+  });
+  // place pins
+  for (const p of places) {
+    const gi = p.gi - state.rect.i0, gj = p.gj - state.rect.j0;
+    if (gi < 0 || gj < 0 || gi >= sub.w || gj >= sub.h) continue;
+    const v = sub.g[Math.floor(gj) * sub.w + Math.floor(gi)];
+    const div = document.createElement('div');
+    div.className = 'label3d'; div.textContent = p.name;
+    const o = new CSS2DObject(div);
+    o.userData = { level: model.levels.filter((l) => v >= l).length, x: model.mm((gi + 0.5) * cellM), z: model.mm((gj + 0.5) * cellM) };
+    model3d.add(o);
+  }
+  model3d.position.set(-FW / 2, 0, -FH / 2);
+  layout();
+  if (refit) fit();
+  stats();
+}
+
+function layout() {
+  const t = state.thick, gap = state.explode;
+  plates3d.forEach((m, k) => { m.scale.y = t; m.position.y = k * (t + gap); });
+  etch3d.forEach((l, k) => { l.position.y = k * (t + gap) + t + 0.03; });
+  for (const o of model3d.children) if (o.isCSS2DObject) o.position.set(o.userData.x, o.userData.level * (t + gap) + t + 0.5, o.userData.z);
+  $('platesOut').value = `${state.plates}`;
+  $('thickOut').value = `${state.thick} mm`;
+  $('explodeOut').value = `${state.explode} mm`;
+  stats();
+}
+
+function fit() {
+  const s = Math.max(model.frameW, model.frameH);
+  camera.position.set(s * 0.15, s * 0.95, s * 1.15);
+  controls.target.set(0, 0, 0);
+  camera.near = s / 100; camera.far = s * 20; camera.updateProjectionMatrix();
+  table.scale.set(s * 6, s * 6, 1);
+  sun.position.set(-s * 0.8, s * 1.4, -s * 0.5);
+  const c = sun.shadow.camera;
+  c.left = c.bottom = -s * 0.8; c.right = c.top = s * 0.8; c.near = 1; c.far = s * 4; c.updateProjectionMatrix();
+}
+
+function stats() {
+  if (!model) return;
+  const n = model.layers.length + 1;
+  const totalH = n * state.thick;
+  const exag = (state.thick * state.scale) / 1000 / model.step;
+  const fw = model.frameW, fh = model.frameH;
+  const a3 = (fw <= 420 && fh <= 297) || (fw <= 297 && fh <= 420);
+  const pieces = model.layers.reduce((s, l) => s + l.pieces.length, 0);
+  const metres = `${Math.round(sub.w * cellM)} × ${Math.round(sub.h * cellM)} m`;
+  const short = model.layers.length < state.plates ? ` <span class="warn">(only ${model.layers.length} fit under the ${model.elevMax.toFixed(1)} m top)</span>` : '';
+  $('stats').innerHTML = [
+    ['Area', metres],
+    ['Highest point', `${model.elevMax.toFixed(1)} m`],
+    ['Plates', `<b>${n}</b> (base + ${model.layers.length} land)${short}`],
+    ['One plate per', `${model.step} m of height`],
+    ['Model footprint', `${Math.round(fw)} × ${Math.round(fh)} mm ${a3 ? '' : '<span class="warn">· bigger than A3</span>'}`],
+    ['Model height', `${totalH.toFixed(0)} mm`],
+    ['Vertical exaggeration', `${exag.toFixed(1)}×`],
+    ['Separate pieces', `${pieces + 1}`],
+  ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+  const bed = bedSheetsSVG(model, sheetSize());
+  const len = lineLengths(model);
+  // Rough guess, not Epilog data: cutting slows with thickness, etching is fast.
+  const cutMMs = 40 / state.thick, etchMMs = 60;
+  const minutes = (len.cut / cutMMs + (len.score + len.etch) / etchMMs) / 60;
+  const lo = minutes * 0.7, hi = minutes * 1.5;
+  const cost = (m) => 200 + 150 * Math.max(0, Math.ceil(m / 60) - 1);
+  $('laser').innerHTML = [
+    ['Sheets needed', `<b>${bed.sheets.length}</b>${bed.tooBig.length ? ` <span class="warn">· too big: ${bed.tooBig.join(', ')}</span>` : ''}`],
+    ['All on one sheet from', `1:${fitScale(model, { one: true, ...sheetSize() }).toLocaleString('en')}`],
+    ['Cut', `${(len.cut / 1000).toFixed(1)} m`],
+    ['Score + etch', `${((len.score + len.etch) / 1000).toFixed(1)} m`],
+    ['Laser time', `≈ ${Math.round(lo)}–${Math.round(hi)} min <span class="warn">rough guess</span>`],
+    ['Workshop cost', `≈ ${cost(lo)}–${cost(hi)} kr + material`],
+  ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+  $('plateList').innerHTML = [`<tr><td><span class="sw" style="background:#dcc197"></span></td><td>0 · base / sea</td><td>${Math.round(fw)} × ${Math.round(fh)} mm</td></tr>`]
+    .concat(model.layers.map((l) => `<tr><td><span class="sw" style="background:${l.n % 2 ? '#d2b585' : '#dcc197'}"></span></td><td>${l.n} · above ${l.level.toFixed(1)} m</td><td>${l.pieces.length} piece${l.pieces.length === 1 ? '' : 's'}</td></tr>`))
+    .join('');
+}
+
+// ------------------------------------------------------------ downloads
+const download = (name, text) => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+const placesMM = () => places.map((p) => ({ name: p.name, at: [model.mm((p.gi - state.rect.i0 + 0.5) * cellM), model.mm((p.gj - state.rect.j0 + 0.5) * cellM)] }))
+  .filter(({ at: [x, y] }) => x > 0 && y > 0 && x < model.frameW && y < model.frameH);
+$('dlBed').onclick = async () => {
+  const { sheets } = bedSheetsSVG(model, sheetSize());
+  for (let k = 0; k < sheets.length; k++) { download(`havsudden-bed-${k + 1}.svg`, sheets[k]); await new Promise((r) => setTimeout(r, 250)); }
+};
+const sheetSize = () => ({ bedW: +$('bedW').value || 1200, bedH: +$('bedH').value || 900 });
+for (const id of ['bedW', 'bedH']) $(id).addEventListener('change', () => stats());
+const useScale = (s) => {
+  if (![...scaleSel.options].some((o) => +o.value === s)) scaleSel.add(new Option(`1:${s.toLocaleString('en')}`, s));
+  scaleSel.value = s; state.scale = s; schedule(true, true);
+};
+$('fitBed').onclick = () => useScale(fitScale(model, sheetSize()));
+$('fitOne').onclick = () => useScale(fitScale(model, { one: true, ...sheetSize() }));
+$('dlSheet').onclick = () => download('havsudden-plates-a3.svg', platesA3SVG(model));
+$('dlOverview').onclick = () => download('havsudden-overview-a3.svg', overviewA3SVG(model, placesMM(), 'Elevation: NLS Finland korkeusmalli 2 m (CC BY 4.0)'));
+$('dlPlates').onclick = async () => {
+  for (let k = 0; k <= model.layers.length; k++) { download(`havsudden-plate-${k}.svg`, plateSVG(model, k)); await new Promise((r) => setTimeout(r, 250)); }
+};
+
+// ------------------------------------------------------------ loop
+function resize() {
+  const { clientWidth: w, clientHeight: h } = view;
+  renderer.setSize(w, h); labelRenderer.setSize(w, h);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+resize();
+drawMap();
+rebuild(true);
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); labelRenderer.render(scene, camera); });
+</script>
+</body>
+</html>
