@@ -30,6 +30,14 @@
   main { position: relative; overflow: hidden; }
   #view { position: absolute; inset: 0; }
   .label3d { font-size: 11px; background: #fffd; padding: 1px 5px; border-radius: 3px; border: 1px solid #0002; white-space: nowrap; pointer-events: none; transform: translateY(-14px); }
+  .tabs { position: absolute; top: 10px; left: 12px; z-index: 2; display: flex; align-items: center; gap: 6px; }
+  .tabs button { margin: 0; }
+  .tabs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .tabs label { display: none; grid-template-columns: none; margin: 0 0 0 10px; font-size: 11px; color: var(--mute); }
+  #sheet { position: absolute; inset: 0; overflow: auto; padding: 52px 16px 16px; background: #ebe5d9; }
+  #sheet[hidden] { display: none; }
+  #sheet .head { margin: 0 0 6px; font-size: 11px; color: var(--mute); }
+  #sheet svg { display: block; margin-bottom: 20px; background: #e6c99a; box-shadow: 0 1px 6px #0003; }
   .corner { position: absolute; left: 12px; bottom: 10px; color: var(--mute); font-size: 11px; pointer-events: none; }
 </style>
 <script type="importmap">
@@ -64,6 +72,9 @@
 
   <h2>Laser — Epilog Fusion Pro</h2>
   <label>Sheet (mm) <span><input id="bedW" type="number" value="1200" step="10" style="width:64px"> × <input id="bedH" type="number" value="900" step="10" style="width:64px"></span><output></output></label>
+  <label>Gap between pieces <span><input id="gap" type="number" value="4" min="0" step="0.5" style="width:64px"> mm</span><output></output></label>
+  <label>Sheet edge margin <span><input id="margin" type="number" value="10" min="0" step="1" style="width:64px"> mm</span><output></output></label>
+  <div class="hint">The laser cuts exactly on the line, so pieces need no padding to come out right. A few mm keeps the thin strip between neighbours from burning through or shifting, so 2–4 mm is usual. 0 packs tightest.</div>
   <table id="laser"></table>
   <button id="fitOne">Fit everything on one sheet</button>
   <button id="fitBed">Biggest base plate</button>
@@ -77,7 +88,13 @@
   <div class="hint">SVG in millimetres. Red = cut · blue = score (outline of the plate above, so you know where it goes) · black = etched roads, paths, houses. Bed sheets use 0.025 mm lines so the Epilog treats them as vectors.</div>
 </aside>
 <main>
+  <div class="tabs">
+    <button id="tab3d" class="on">3D model</button>
+    <button id="tabSheet">Cutting sheet</button>
+    <label id="zoomBox">Zoom <input id="sheetZoom" type="range" min="100" max="500" step="25" value="100" style="width:120px"></label>
+  </div>
   <div id="view"></div>
+  <div id="sheet" hidden></div>
   <div class="corner">Elevation: NLS Finland korkeusmalli 2 m (CC BY 4.0)</div>
 </main>
 
@@ -329,6 +346,7 @@ function stats() {
     ['Separate pieces', `${pieces + 1}`],
   ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
   const bed = bedSheetsSVG(model, sheetSize());
+  if (tab === 'sheet') paintSheet();
   const len = lineLengths(model);
   // Rough guess, not Epilog data: cutting slows with thickness, etching is fast.
   const cutMMs = 40 / state.thick, etchMMs = 60;
@@ -361,8 +379,32 @@ $('dlBed').onclick = async () => {
   const { sheets } = bedSheetsSVG(model, sheetSize());
   for (let k = 0; k < sheets.length; k++) { download(`havsudden-bed-${k + 1}.svg`, sheets[k]); await new Promise((r) => setTimeout(r, 250)); }
 };
-const sheetSize = () => ({ bedW: +$('bedW').value || 1200, bedH: +$('bedH').value || 900 });
-for (const id of ['bedW', 'bedH']) $(id).addEventListener('change', () => stats());
+const num = (id, fallback) => { const v = parseFloat($(id).value); return v >= 0 ? v : fallback; };
+const sheetSize = () => ({ bedW: +$('bedW').value || 1200, bedH: +$('bedH').value || 900, gap: num('gap', 4), margin: num('margin', 10) });
+for (const id of ['bedW', 'bedH', 'gap', 'margin']) $(id).addEventListener('input', () => stats());
+
+// Cutting sheet tab: the bed-sheet SVG inline, with lines drawn wide enough to see.
+let tab = '3d';
+function paintSheet() {
+  const opt = sheetSize();
+  const { sheets, tooBig } = bedSheetsSVG(model, { ...opt, screen: true });
+  const warn = tooBig.length ? `<p class="head warn">Too big for the sheet, not shown: ${tooBig.join(', ')}</p>` : '';
+  $('sheet').innerHTML = warn + sheets.map((s, k) =>
+    `<p class="head">Sheet ${k + 1} of ${sheets.length} · ${opt.bedW} × ${opt.bedH} mm · ${opt.gap} mm between pieces · red = cut · blue = score and numbers · black = etch · arrows point north</p>` +
+    s.replace(/^<\?xml[^>]*\?>\s*/, '').replace(/width="[\d.]+mm" height="[\d.]+mm"/, `style="width:${$('sheetZoom').value}%;height:auto"`)).join('');
+}
+function showTab(t) {
+  tab = t;
+  $('tab3d').classList.toggle('on', t === '3d');
+  $('tabSheet').classList.toggle('on', t === 'sheet');
+  $('view').style.display = t === '3d' ? '' : 'none';
+  $('sheet').hidden = t !== 'sheet';
+  $('zoomBox').style.display = t === 'sheet' ? 'inline-flex' : '';
+  if (t === 'sheet') paintSheet(); else resize();
+}
+$('tab3d').onclick = () => showTab('3d');
+$('tabSheet').onclick = () => showTab('sheet');
+$('sheetZoom').addEventListener('input', () => { for (const s of $('sheet').querySelectorAll('svg')) s.style.width = `${$('sheetZoom').value}%`; });
 const useScale = (s) => {
   if (![...scaleSel.options].some((o) => +o.value === s)) scaleSel.add(new Option(`1:${s.toLocaleString('en')}`, s));
   scaleSel.value = s; state.scale = s; schedule(true, true);
@@ -385,6 +427,7 @@ addEventListener('resize', resize);
 resize();
 drawMap();
 rebuild(true);
+if (location.hash === '#sheet') showTab('sheet');
 renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); labelRenderer.render(scene, camera); });
 </script>
 </body>

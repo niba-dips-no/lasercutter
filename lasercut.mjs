@@ -2,7 +2,7 @@
  * Laser-cut contour model of Havsudden, from the baked DEM.
  *
  *   node lasercut.mjs [--area ukintie|havsudden|all] [--plates 4]
- *                             [--thickness 6] [--scale one|N] [--margin 40]
+ *                             [--thickness 6] [--scale one|N] [--margin 40] [--gap 4]
  *
  * Reads the baked DEM and OSM from havsudden-3d (--data, default
  * ../havsudden-3d/public/data — run `npm run bake` there first). Writes to out/:
@@ -49,6 +49,7 @@ const THICK = +(args.thickness ?? 6);
 // A number, or 'one': the biggest 1:N at which every piece fits one bed sheet.
 const SCALE_ARG = args.scale ?? AREAS[AREA].scale;
 const MARGIN_M = +(args.margin ?? 40);
+const BED = { gap: +(args.gap ?? 4) }; // mm between pieces on the bed sheet
 const JOIN = +(args.join ?? 2);
 const SEA = 0.5;
 const CELL = 2;    // 2 m DEM pixels → 4 m cells
@@ -139,7 +140,7 @@ for (let j = 0; j < h; j++) {
   }
 }
 const build = (scale) => buildModel(sub, w, h, { cellM, scale, sea: SEA, plates: PLATES, tol: 0.15, minArea: 6, features, offset: [rect.i0, rect.j0] });
-const SCALE = SCALE_ARG === 'one' ? fitScale(build(7000), { one: true }) : +SCALE_ARG;
+const SCALE = SCALE_ARG === 'one' ? fitScale(build(7000), { one: true, ...BED }) : +SCALE_ARG;
 const model = build(SCALE);
 
 console.log(`${AREA}: ${w * cellM} × ${h * cellM} m · top ${model.elevMax.toFixed(1)} m · 1:${SCALE} → ${Math.round(model.frameW)} × ${Math.round(model.frameH)} mm`);
@@ -160,10 +161,10 @@ write('overview-a3.svg', overviewA3SVG(model, placesMM, CREDIT));
 write('plates-a3.svg', platesA3SVG(model));
 for (let k = 0; k <= model.layers.length; k++) write(`plate-${k}.svg`, plateSVG(model, k));
 // Epilog Fusion Pro at Deichman Folkeverksted: 1200 × 900 mm bed.
-const bed = bedSheetsSVG(model);
+const bed = bedSheetsSVG(model, BED);
 bed.sheets.forEach((sv, k) => write(`bed-${k + 1}.svg`, sv));
 const len = lineLengths(model);
-console.log(`  bed 1200×900: ${bed.sheets.length} sheet${bed.sheets.length === 1 ? '' : 's'}${bed.tooBig.length ? ` · too big for the bed: ${bed.tooBig.join(', ')}` : ''} · all pieces on one sheet from 1:${fitScale(model, { one: true })}`);
+console.log(`  bed 1200×900: ${bed.sheets.length} sheet${bed.sheets.length === 1 ? '' : 's'}${bed.tooBig.length ? ` · too big for the bed: ${bed.tooBig.join(', ')}` : ''} · all pieces on one sheet from 1:${fitScale(model, { one: true, ...BED })}`);
 console.log(`  lines: cut ${(len.cut / 1000).toFixed(1)} m · score ${(len.score / 1000).toFixed(1)} m · etch ${(len.etch / 1000).toFixed(1)} m`);
 
 // The page gets the whole smoothed grid (centimetres, Uint16) so any area can be picked.
