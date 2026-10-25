@@ -93,7 +93,8 @@
   <div class="tabs">
     <button id="tab3d" class="on">3D model</button>
     <button id="tabSheet">Cutting sheet</button>
-    <label id="zoomBox">Zoom <input id="sheetZoom" type="range" min="100" max="500" step="25" value="100" style="width:120px"></label>
+    <label id="zoomBox">Zoom <input id="sheetZoom" type="range" min="100" max="500" step="25" value="100" style="width:120px">
+      <span style="margin-left:10px"><input id="showFree" type="checkbox" checked> Show free space</span></label>
   </div>
   <div id="view"></div>
   <div id="sheet" hidden></div>
@@ -333,7 +334,7 @@ function stats() {
   const totalH = n * state.thick;
   const exag = (state.thick * state.scale) / 1000 / model.step;
   const fw = model.frameW, fh = model.frameH;
-  const a3 = (fw <= 420 && fh <= 297) || (fw <= 297 && fh <= 420);
+  const bedArea = sheetSize().bedW * sheetSize().bedH;
   const pieces = model.layers.reduce((s, l) => s + l.pieces.length, 0);
   const metres = `${Math.round(sub.w * cellM)} × ${Math.round(sub.h * cellM)} m`;
   const short = model.layers.length < state.plates ? ` <span class="warn">(only ${model.layers.length} fit under the ${model.elevMax.toFixed(1)} m top)</span>` : '';
@@ -342,7 +343,7 @@ function stats() {
     ['Highest point', `${model.elevMax.toFixed(1)} m`],
     ['Plates', `<b>${n}</b> (base + ${model.layers.length} land)${short}`],
     ['One plate per', `${model.step} m of height`],
-    ['Model footprint', `${Math.round(fw)} × ${Math.round(fh)} mm ${a3 ? '' : '<span class="warn">· bigger than A3</span>'}`],
+    ['Model footprint', `${Math.round(fw)} × ${Math.round(fh)} mm · ${Math.round(((fw * fh) / bedArea) * 100)}% of a sheet`],
     ['Model height', `${totalH.toFixed(0)} mm`],
     ['Vertical exaggeration', `${exag.toFixed(1)}×`],
     ['Separate pieces', `${pieces + 1}`],
@@ -355,8 +356,13 @@ function stats() {
   const minutes = (len.cut / cutMMs + (len.score + len.etch) / etchMMs) / 60;
   const lo = minutes * 0.7, hi = minutes * 1.5;
   const cost = (m) => 200 + 150 * Math.max(0, Math.ceil(m / 60) - 1);
+  const space = sheetSpace(model, sheetSize()).at(-1);
   $('laser').innerHTML = [
     ['Sheets needed', `<b>${bed.sheets.length}</b>${bed.tooBig.length ? ` <span class="warn">· too big: ${bed.tooBig.join(', ')}</span>` : ''}`],
+    ...(space ? [
+      ['Plywood used by pieces', `${space.materialPct.toFixed(0)}% of the sheet`],
+      ['Free for other cuts', `<b>${Math.round(space.free.w)} × ${Math.round(space.free.h)} mm</b> largest block · ${space.freePct.toFixed(0)}% of the sheet${bed.sheets.length > 1 ? ' (last sheet)' : ''}`],
+    ] : []),
     ['All on one sheet from', `1:${fitScale(model, { one: true, ...sheetSize() }).toLocaleString('en')}`],
     ['Cut', `${(len.cut / 1000).toFixed(1)} m`],
     ['Score + etch', `${((len.score + len.etch) / 1000).toFixed(1)} m`],
@@ -392,9 +398,16 @@ function paintSheet() {
   const opt = sheetSize();
   const { sheets, tooBig } = bedSheetsSVG(model, { ...opt, screen: true });
   const warn = tooBig.length ? `<p class="head warn">Too big for the sheet, not shown: ${tooBig.join(', ')}</p>` : '';
+  const spaces = sheetSpace(model, opt);
+  const freeBox = (k) => {
+    const { x, y, w, h } = spaces[k].free;
+    if (!$('showFree').checked || !w) return '';
+    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#2e7d3220" stroke="#2e7d32" stroke-width="1.6" stroke-dasharray="8 5" vector-effect="non-scaling-stroke"/>` +
+      `<text x="${x + w / 2}" y="${y + h / 2}" font-size="${Math.max(8, Math.min(w, h) / 18)}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" fill="#2e7d32">free ${Math.round(w)} × ${Math.round(h)} mm</text>`;
+  };
   $('sheet').innerHTML = warn + sheets.map((s, k) =>
     `<p class="head">Sheet ${k + 1} of ${sheets.length} · ${opt.bedW} × ${opt.bedH} mm · ${opt.gap} mm between pieces · red = cut · blue = score and numbers · black = etch · arrows point north</p>` +
-    s.replace(/^<\?xml[^>]*\?>\s*/, '').replace(/width="[\d.]+mm" height="[\d.]+mm"/, `style="width:${$('sheetZoom').value}%;height:auto"`)).join('');
+    s.replace(/^<\?xml[^>]*\?>\s*/, '').replace('</svg>', `${freeBox(k)}</svg>`).replace(/width="[\d.]+mm" height="[\d.]+mm"/, `style="width:${$('sheetZoom').value}%;height:auto"`)).join('');
 }
 function showTab(t) {
   tab = t;
@@ -407,6 +420,7 @@ function showTab(t) {
 }
 $('tab3d').onclick = () => showTab('3d');
 $('tabSheet').onclick = () => showTab('sheet');
+$('showFree').addEventListener('input', () => paintSheet());
 $('sheetZoom').addEventListener('input', () => { for (const s of $('sheet').querySelectorAll('svg')) s.style.width = `${$('sheetZoom').value}%`; });
 const useScale = (s) => {
   if (![...scaleSel.options].some((o) => +o.value === s)) scaleSel.add(new Option(`1:${s.toLocaleString('en')}`, s));

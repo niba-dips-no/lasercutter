@@ -26,7 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { demPixelToWorld, latLonToWorld } from './vendor/projection.js';
 import { WAYPOINTS } from './vendor/waypoints.js';
-import { baseGuideSVG, bedSheetsSVG, blur, buildModel, fitScale, landMask, lineLengths, overviewA3SVG, platesA3SVG, plateSVG } from './lib/core.js';
+import { baseGuideSVG, bedSheetsSVG, blur, buildModel, fitScale, landMask, lineLengths, overviewA3SVG, platesA3SVG, plateSVG, sheetSpace } from './lib/core.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(
@@ -171,6 +171,8 @@ bed.sheets.forEach((sv, k) => write(`bed-${k + 1}.svg`, sv));
 write('base-guide.svg', baseGuideSVG(model));
 const len = lineLengths(model, BED);
 console.log(`  bed 1200×900: ${bed.sheets.length} sheet${bed.sheets.length === 1 ? '' : 's'}${bed.tooBig.length ? ` · too big for the bed: ${bed.tooBig.join(', ')}` : ''} · all pieces on one sheet from 1:${fitScale(model, { one: true, ...BED })}`);
+const space = sheetSpace(model, BED).at(-1);
+if (space) console.log(`  sheet: pieces use ${space.materialPct.toFixed(0)}% of the plywood · free for other cuts: ${space.free.w} × ${space.free.h} mm largest block, ${space.freePct.toFixed(0)}% of the sheet`);
 console.log(`  lines: cut ${(len.cut / 1000).toFixed(1)} m · score ${(len.score / 1000).toFixed(1)} m · etch ${(len.etch / 1000).toFixed(1)} m`);
 
 // The page gets the whole smoothed grid (centimetres, Uint16) so any area can be picked.
