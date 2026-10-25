@@ -75,6 +75,7 @@
   <label>Gap between pieces <span><input id="gap" type="number" value="4" min="0" step="0.5" style="width:64px"> mm</span><output></output></label>
   <label>Sheet edge margin <span><input id="margin" type="number" value="10" min="0" step="1" style="width:64px"> mm</span><output></output></label>
   <label style="grid-template-columns: 20px 1fr"><input id="incBase" type="checkbox"> Also cut the base / sea plate</label>
+  <label style="grid-template-columns: 20px 1fr"><input id="notes" type="checkbox" checked> Write laser instructions on the sheet</label>
   <div class="hint">The laser cuts exactly on the line, so pieces need no padding to come out right. A few mm keeps the thin strip between neighbours from burning through or shifting, so 2–4 mm is usual. 0 packs tightest.</div>
   <table id="laser"></table>
   <button id="fitOne">Fit everything on one sheet</button>
@@ -83,6 +84,7 @@
 
   <h2>Download</h2>
   <button id="dlBed">Bed sheets 1200 × 900 — true scale</button>
+  <button id="dlBedDxf">Bed sheets as DXF</button>
   <button id="dlBase">Base plate guide — true scale</button>
   <button id="dlSheet">A3 sheet — all plates</button>
   <button id="dlOverview">A3 overview map</button>
@@ -377,7 +379,7 @@ function stats() {
 // ------------------------------------------------------------ downloads
 const download = (name, text) => {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
+  a.href = URL.createObjectURL(new Blob([text], { type: name.endsWith('.dxf') ? 'image/vnd.dxf' : 'image/svg+xml' }));
   a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
@@ -388,8 +390,12 @@ $('dlBed').onclick = async () => {
   for (let k = 0; k < sheets.length; k++) { download(`havsudden-bed-${k + 1}.svg`, sheets[k]); await new Promise((r) => setTimeout(r, 250)); }
 };
 const num = (id, fallback) => { const v = parseFloat($(id).value); return v >= 0 ? v : fallback; };
-const sheetSize = () => ({ bedW: +$('bedW').value || 1200, bedH: +$('bedH').value || 900, gap: num('gap', 4), margin: num('margin', 10), base: $('incBase').checked });
-for (const id of ['bedW', 'bedH', 'gap', 'margin', 'incBase']) $(id).addEventListener('input', () => stats());
+const sheetSize = () => ({ bedW: +$('bedW').value || 1200, bedH: +$('bedH').value || 900, gap: num('gap', 4), margin: num('margin', 10), base: $('incBase').checked, notes: $('notes').checked, thick: state.thick });
+for (const id of ['bedW', 'bedH', 'gap', 'margin', 'incBase', 'notes']) $(id).addEventListener('input', () => stats());
+$('dlBedDxf').onclick = async () => {
+  const { sheets } = bedSheetsDXF(model, sheetSize());
+  for (let k = 0; k < sheets.length; k++) { download(`havsudden-bed-${k + 1}.dxf`, sheets[k]); await new Promise((r) => setTimeout(r, 250)); }
+};
 $('dlBase').onclick = () => download('havsudden-base-guide.svg', baseGuideSVG(model));
 
 // Cutting sheet tab: the bed-sheet SVG inline, with lines drawn wide enough to see.
