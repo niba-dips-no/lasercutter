@@ -2,7 +2,7 @@
  * Laser-cut contour model of Havsudden, from the baked DEM.
  *
  *   node lasercut.mjs [--area ukintie|havsudden|all] [--plates 4]
- *                             [--thickness 6] [--scale one|N] [--margin 40] [--gap 4]
+ *                             [--thickness 6] [--scale one|N] [--margin 40] [--gap 4] [--base]
  *
  * Reads the baked DEM and OSM from havsudden-3d (--data, default
  * ../havsudden-3d/public/data — run `npm run bake` there first). Writes to out/:
@@ -12,7 +12,9 @@
  *   plates-a3.svg     every plate packed onto one A3 sheet (scaled)
  *   plate-N.svg       each plate at true scale, full frame so the stack registers
  *   bed-N.svg         every piece at true scale, packed on 1200 × 900 mm laser-bed
- *                     sheets (Epilog Fusion Pro, Deichman Folkeverksted)
+ *                     sheets (Epilog Fusion Pro, Deichman Folkeverksted). Without
+ *                     --base the base / sea plate is left off — buy it separately
+ *   base-guide.svg    the base plate's outline and where plate 1 goes, true scale
  *
  * Roads, paths and houses from the baked OSM are etched (black) on the plate
  * each one ends up visible on. `--area havsudden` is the peninsula alone, cut
@@ -24,7 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { demPixelToWorld, latLonToWorld } from './vendor/projection.js';
 import { WAYPOINTS } from './vendor/waypoints.js';
-import { bedSheetsSVG, blur, buildModel, fitScale, landMask, lineLengths, overviewA3SVG, platesA3SVG, plateSVG } from './lib/core.js';
+import { baseGuideSVG, bedSheetsSVG, blur, buildModel, fitScale, landMask, lineLengths, overviewA3SVG, platesA3SVG, plateSVG } from './lib/core.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(
@@ -38,7 +40,9 @@ const args = Object.fromEntries(
 const AREAS = {
   // Ukintie and the Nyberga headland down to the Havsudden peninsula — traced
   // from the user's OSM screenshot. The north edge is clipped to the DEM.
-  ukintie: { bbox: [60.2109, 25.5901, 60.2346, 25.6247], scale: 'one' },
+  // 1:4250 is what fitted one sheet with the base plate on it; the base is bought
+  // separately now, so `--scale one` would make the model bigger.
+  ukintie: { bbox: [60.2109, 25.5901, 60.2346, 25.6247], scale: 4250 },
   havsudden: { peninsula: 'havsudden', scale: 3000 },
   all: { scale: 5000 },
 };
@@ -49,7 +53,8 @@ const THICK = +(args.thickness ?? 6);
 // A number, or 'one': the biggest 1:N at which every piece fits one bed sheet.
 const SCALE_ARG = args.scale ?? AREAS[AREA].scale;
 const MARGIN_M = +(args.margin ?? 40);
-const BED = { gap: +(args.gap ?? 4) }; // mm between pieces on the bed sheet
+// gap: mm between pieces on the bed sheet; base: also cut the base / sea plate (--base)
+const BED = { gap: +(args.gap ?? 4), base: 'base' in args };
 const JOIN = +(args.join ?? 2);
 const SEA = 0.5;
 const CELL = 2;    // 2 m DEM pixels → 4 m cells
@@ -163,7 +168,8 @@ for (let k = 0; k <= model.layers.length; k++) write(`plate-${k}.svg`, plateSVG(
 // Epilog Fusion Pro at Deichman Folkeverksted: 1200 × 900 mm bed.
 const bed = bedSheetsSVG(model, BED);
 bed.sheets.forEach((sv, k) => write(`bed-${k + 1}.svg`, sv));
-const len = lineLengths(model);
+write('base-guide.svg', baseGuideSVG(model));
+const len = lineLengths(model, BED);
 console.log(`  bed 1200×900: ${bed.sheets.length} sheet${bed.sheets.length === 1 ? '' : 's'}${bed.tooBig.length ? ` · too big for the bed: ${bed.tooBig.join(', ')}` : ''} · all pieces on one sheet from 1:${fitScale(model, { one: true, ...BED })}`);
 console.log(`  lines: cut ${(len.cut / 1000).toFixed(1)} m · score ${(len.score / 1000).toFixed(1)} m · etch ${(len.etch / 1000).toFixed(1)} m`);
 
