@@ -9,16 +9,16 @@ README.md is the user-facing description; this file is the state of play.
 ## Run it
 
 ```sh
-npm run build                         # → out/ (index.html, bed-1.svg/.dxf, housing.md, plate-N.svg, ...)
+npm run build                         # → out/ (index.html, bed-1.svg/.dxf, plate-N.svg, ...)
 node lasercut.mjs --area ukintie      # the wider Ukintie area (1:4250, 6 mm board were its old defaults)
 node lasercut.mjs --gap 3 --keyrings 10 --thickness 4 --scale 5000
 node lasercut.mjs --base              # also cut the base / sea plate
-node lasercut.mjs --no-notes --no-housing
+node lasercut.mjs --no-notes --housing   # --housing adds H1–H7 + housing.md (off by default)
 node lasercut.mjs --scale one         # biggest model that nests on one sheet (about 1:2950; slow-ish, ~4 s)
 ```
 Reads `../havsudden-3d/public/data` (heightmap.bin/json, osm.json). Defaults: `--area havsudden`
 (peninsula only, cut at the user's red line, plus two islets; coast `--sea 0.1` m) at 1:2000 (frame 476 × 432 mm), 12 land plates (2 m/plate, ~3× vertical exaggeration; true scale would be ~4), 3 mm board, smoothing `--smooth 1` cell, gap 4 mm, edge margin 10 mm,
-6 keyrings, housing on. `out/` is generated and git-ignored.
+6 keyrings, housing parts off (`--housing` / page checkbox). `out/` is generated and git-ignored.
 
 ## Files
 
