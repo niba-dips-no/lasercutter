@@ -124,7 +124,7 @@ const cm = new Uint16Array(raw.buffer);
 const grid = Float32Array.from(cm, (v) => v / 100);
 
 // The peninsula, cut off at its low neck — everything else can be dropped to sea.
-const land = DATA.seed ? landMask(grid, W, H, DATA.seed[0], DATA.seed[1], { join: DATA.join, sea: 0.5 }) : null;
+const land = DATA.seed ? landMask(grid, W, H, DATA.seed[0], DATA.seed[1], { join: DATA.join, sea: DATA.sea, cut: DATA.cut, islets: DATA.islets }) : null;
 const state = { only: !!land && DATA.only, etch: true, rect: { ...DATA.rect }, plates: DATA.plates, thick: DATA.thick, scale: DATA.scale, explode: 0 };
 
 // ------------------------------------------------------------ map
@@ -142,12 +142,12 @@ for (let k = 0; k < W * H; k++) {
   const dy = grid[Math.min(H - 1, j + 1) * W + i] - grid[Math.max(0, j - 1) * W + i];
   const shade = Math.max(0.55, Math.min(1.15, 1 + (dy - dx) * 0.12));
   let c;
-  if (v < 0.5) c = [196, 216, 226];
+  if (v < DATA.sea) c = [196, 216, 226];
   else { const t = v / top; c = [180 + 60 * t, 200 + 20 * t, 140 + 70 * t].map((x) => x * shade); }
   base.data.set([...c, 255], k * 4);
 }
 const masked = new ImageData(new Uint8ClampedArray(base.data), W, H);
-if (land) for (let k = 0; k < W * H; k++) if (!land.mask[k] && grid[k] >= 0.5) masked.data.set([214, 222, 214, 255], k * 4);
+if (land) for (let k = 0; k < W * H; k++) if (!land.mask[k] && grid[k] >= DATA.sea) masked.data.set([214, 222, 214, 255], k * 4);
 function drawMap() {
   mctx.putImageData(state.only ? masked : base, 0, 0);
   const { i0, j0, i1, j1 } = state.rect;
@@ -250,7 +250,7 @@ function cropGrid() {
   for (let j = 0; j < h; j++) {
     for (let i = 0; i < w; i++) {
       const k = (j + j0) * W + i + i0;
-      g[j * w + i] = state.only && !land.mask[k] ? 0 : grid[k];
+      g[j * w + i] = state.only && !land.mask[k] ? 0 : state.only && land.mask[k] === 2 ? Math.max(grid[k], DATA.sea + 0.05) : grid[k];
     }
   }
   return { g, w, h };
@@ -258,7 +258,7 @@ function cropGrid() {
 
 function rebuild(refit) {
   sub = cropGrid();
-  model = buildModel(sub.g, sub.w, sub.h, { cellM, scale: state.scale, sea: 0.5, plates: state.plates, tol: 0.15, minArea: 6,
+  model = buildModel(sub.g, sub.w, sub.h, { cellM, scale: state.scale, sea: DATA.sea, plates: state.plates, tol: 0.15, minArea: 6,
     features: state.etch ? DATA.features : null, offset: [state.rect.i0, state.rect.j0] });
   for (const m of model3d.children.slice()) { m.geometry?.dispose(); model3d.remove(m); }
   plates3d = [];

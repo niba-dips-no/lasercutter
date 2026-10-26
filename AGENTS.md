@@ -10,14 +10,14 @@ README.md is the user-facing description; this file is the state of play.
 
 ```sh
 npm run build                         # → out/ (index.html, bed-1.svg/.dxf, housing.md, plate-N.svg, ...)
-node lasercut.mjs --area havsudden    # peninsula only
+node lasercut.mjs --area ukintie      # the wider Ukintie area (1:4250, 6 mm board were its old defaults)
 node lasercut.mjs --gap 3 --keyrings 10 --thickness 4 --scale 5000
 node lasercut.mjs --base              # also cut the base / sea plate
 node lasercut.mjs --no-notes --no-housing
 node lasercut.mjs --scale one         # biggest model that nests on one sheet (about 1:2950; slow-ish, ~4 s)
 ```
-Reads `../havsudden-3d/public/data` (heightmap.bin/json, osm.json). Defaults: `--area ukintie`
-at 1:4250 (frame 439 × 590 mm), 4 land plates, 6 mm board, gap 4 mm, edge margin 10 mm,
+Reads `../havsudden-3d/public/data` (heightmap.bin/json, osm.json). Defaults: `--area havsudden`
+(peninsula only, cut at the user's red line, plus two islets; coast `--sea 0.1` m) at 1:2000 (frame 476 × 432 mm), 12 land plates (2 m/plate, ~3× vertical exaggeration; true scale would be ~4), 3 mm board, smoothing `--smooth 1` cell, gap 4 mm, edge margin 10 mm,
 6 keyrings, housing on. `out/` is generated and git-ignored.
 
 ## Files
@@ -60,6 +60,8 @@ cells so the real gap is ≥ the asked gap. Largest first; housing parts are ord
 SVG groups carry `translate(..) rotate(0|90|180|270)`; the DXF writer re-derives geometry by parsing them.
 
 ## Peninsula mode
+
+The default area. `AREAS.havsudden` in `lasercut.mjs` holds a `cut` line (lat/lon of the red line's ends; kept side = Havsudden's), `islets` (Havsuddshället, one NW rock; islet cells are mask value 2 and lifted to sea+0.05 because smoothing blurs them away) and `sea: 0.1`. With a cut, `landMask` floods all land down to `sea` instead of stopping at the 2 m neck. The old description below applies to the no-cut case.
 
 `landMask`: flood-fill land ≥ `join` (2 m) from Havsudden, then grow over land ≥ 0.5 m by true distance
 (Dijkstra, 12 cells = 48 m). The old ring-by-ring growth cut diamond-shaped corners on flat shore (the user's

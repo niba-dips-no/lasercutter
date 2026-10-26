@@ -46,13 +46,16 @@ const AREAS = {
   // 1:4250 is what fitted one sheet with the base plate on it; the base is bought
   // separately now, so `--scale one` would make the model bigger.
   ukintie: { bbox: [60.2109, 25.5901, 60.2346, 25.6247], scale: 4250 },
-  havsudden: { peninsula: 'havsudden', scale: 3000 },
+  // Cut along the user's red line across the neck (lat/lon of its two ends; override with
+  // --cut "lat0,lon0,lat1,lon1"), plus Havsuddshället (the lighthouse islet, south-west) and the
+  // half-submerged rock north-west of the point (the DEM has only one rock there).
+  havsudden: { peninsula: 'havsudden', scale: 2000, sea: 0.1, cut: [60.217327, 25.620161, 60.211276, 25.621645], islets: [[60.21208319407668, 25.60948210416495], [60.21829930538976, 25.606072791182974]] },
   all: { scale: 5000 },
 };
-const AREA = args.area ?? 'ukintie';
+const AREA = args.area ?? 'havsudden';
 if (!AREAS[AREA]) throw new Error(`unknown --area ${AREA}; one of ${Object.keys(AREAS).join(', ')}`);
-const PLATES = +(args.plates ?? 4);
-const THICK = +(args.thickness ?? 6);
+const PLATES = +(args.plates ?? 12);
+const THICK = +(args.thickness ?? 3);
 // A number, or 'one': the biggest 1:N at which every piece fits one bed sheet.
 const SCALE_ARG = args.scale ?? AREAS[AREA].scale;
 const MARGIN_M = +(args.margin ?? 40);
@@ -60,9 +63,10 @@ const MARGIN_M = +(args.margin ?? 40);
 // notes: laser instructions written into the sheet's free space (--no-notes to leave them off)
 const BED = { gap: +(args.gap ?? 4), base: 'base' in args, notes: !('no-notes' in args), thick: THICK, keyrings: +(args.keyrings ?? 6), housing: 'no-housing' in args ? null : housingParts({ thickness: THICK }) };
 const JOIN = +(args.join ?? 2);
-const SEA = 0.5;
+// Height of the lowest plate's outline (the coast), m. The peninsula goes as low as the smoothed DEM allows.
+const SEA = +(args.sea ?? AREAS[AREA].sea ?? 0.5);
 const CELL = 2;    // 2 m DEM pixels → 4 m cells
-const SIGMA = 1.5; // smoothing, cells — keeps cut lines from following every boulder
+const SIGMA = +(args.smooth ?? 1); // smoothing, cells (--smooth) — keeps cut lines from following every boulder; lower keeps steep spots sharper
 const OUT = args.out ?? path.join(HERE, 'out');
 const DATA = args.data ?? path.join(HERE, '../havsudden-3d/public/data');
 const CREDIT = 'Elevation: NLS Finland korkeusmalli 2 m (CC BY 4.0)';
@@ -108,13 +112,16 @@ let mask = null;
 // The peninsula toggle in the page always floods from Havsudden.
 const seed = toGrid(WAYPOINTS.havsudden.lat, WAYPOINTS.havsudden.lon).map(Math.round);
 const { bbox, peninsula } = AREAS[AREA];
+const llCut = args.cut ? args.cut.split(',').map(Number) : AREAS.havsudden.cut;
+const cut = [...toGrid(llCut[0], llCut[1]), ...toGrid(llCut[2], llCut[3])];
+const islets = AREAS.havsudden.islets.map(([lat, lon]) => toGrid(lat, lon).map(Math.round));
 if (bbox) {
   const [s0, w0, n0, e0] = bbox;
   const [i0, j0] = toGrid(n0, w0), [i1, j1] = toGrid(s0, e0);
   rect = { i0: Math.max(0, Math.floor(i0)), j0: Math.max(0, Math.floor(j0)), i1: Math.min(W, Math.ceil(i1)), j1: Math.min(H, Math.ceil(j1)) };
 } else if (peninsula) {
   const [si, sj] = toGrid(WAYPOINTS[peninsula].lat, WAYPOINTS[peninsula].lon).map(Math.round);
-  const land = landMask(grid, W, H, si, sj, { join: JOIN, sea: SEA });
+  const land = landMask(grid, W, H, si, sj, { join: JOIN, sea: SEA, cut, islets });
   if (!land) throw new Error(`${peninsula} is below the ${JOIN} m flood threshold`);
   ({ mask } = land);
   const { i0: x0, j0: y0, i1: x1, j1: y1 } = land.box;
@@ -145,7 +152,7 @@ const sub = new Float32Array(w * h);
 for (let j = 0; j < h; j++) {
   for (let i = 0; i < w; i++) {
     const k = (j + rect.j0) * W + i + rect.i0;
-    sub[j * w + i] = !mask || mask[k] ? grid[k] : 0; // past the neck is sea
+    sub[j * w + i] = !mask || mask[k] ? (mask?.[k] === 2 ? Math.max(grid[k], SEA + 0.05) : grid[k]) : 0; // past the neck is sea
   }
 }
 const build = (scale) => buildModel(sub, w, h, { cellM, scale, sea: SEA, plates: PLATES, tol: 0.15, minArea: 6, features, offset: [rect.i0, rect.j0] });
@@ -191,7 +198,7 @@ console.log(`  lines: cut ${(len.cut / 1000).toFixed(1)} m · score ${(len.score
 
 // The page gets the whole smoothed grid (centimetres, Uint16) so any area can be picked.
 const cm = Uint16Array.from(grid, (v) => Math.round(Math.max(0, v) * 100));
-const data = { W, H, cellM, places, features, rect, seed, join: JOIN, only: !!mask, plates: PLATES, thick: THICK, scale: SCALE, grid: Buffer.from(cm.buffer).toString('base64') };
+const data = { W, H, cellM, places, features, rect, seed, join: JOIN, sea: SEA, cut, islets, only: !!mask, plates: PLATES, thick: THICK, scale: SCALE, grid: Buffer.from(cm.buffer).toString('base64') };
 const core = fs.readFileSync(path.join(HERE, 'lib/core.js'), 'utf8').replace(/^export /gm, '');
 // housing.js goes in as a function scope of its own so its helper names can't clash with core's.
 const housingSrc = '(() => {\n' + fs.readFileSync(path.join(HERE, 'lib/housing.js'), 'utf8').replace(/^export /gm, '') + '\nreturn { housingParts, housingInfo, housingModel, HOUSING_DEFAULTS };\n})()';
