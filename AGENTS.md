@@ -87,6 +87,8 @@ wood (the current art is black only; the script also handles strokes). Art stays
 
 ## Housing (lib/housing.js)
 
+The housing parts are on the cutting sheet but carry no H1–H7 labels and the sheet notes don't mention them (the user can puzzle them together); the ids below are for `housing.md` and the 3D tab.
+
 Wedge leaning back 12°, window exactly 165 × 100 mm, 6 mm board by default (params scale to 3/4 mm).
 Outside ≈ 207 × 70 × 151 mm (223 mm wide with ear tips). Parts: H1 Front (window, pinned ears), H2 Back (pinned
 ears, plain), H3 Side, H4 Side (USB), H5 Top, H6 Bottom (press-fit tabs), H7 Glass & screen frame (ring glued to the
