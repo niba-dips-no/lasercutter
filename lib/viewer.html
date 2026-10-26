@@ -33,7 +33,7 @@
   .tabs { position: absolute; top: 10px; left: 12px; z-index: 2; display: flex; align-items: center; gap: 6px; }
   .tabs button { margin: 0; }
   .tabs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
-  .tabs label { display: none; grid-template-columns: none; margin: 0 0 0 10px; font-size: 11px; color: var(--mute); }
+  .tabs label { display: none; align-items: center; gap: 4px; grid-template-columns: none; margin: 0 0 0 10px; font-size: 11px; color: var(--mute); }
   #sheet { position: absolute; inset: 0; overflow: auto; padding: 52px 16px 16px; background: #ebe5d9; }
   #sheet[hidden] { display: none; }
   #sheet .head { margin: 0 0 6px; font-size: 11px; color: var(--mute); }
@@ -74,6 +74,9 @@
   <label>Sheet (mm) <span><input id="bedW" type="number" value="1200" step="10" style="width:64px"> × <input id="bedH" type="number" value="900" step="10" style="width:64px"></span><output></output></label>
   <label>Gap between pieces <span><input id="gap" type="number" value="4" min="0" step="0.5" style="width:64px"> mm</span><output></output></label>
   <label>Sheet edge margin <span><input id="margin" type="number" value="10" min="0" step="1" style="width:64px"> mm</span><output></output></label>
+  <label>Keyrings <span><input id="keyrings" type="number" value="6" min="0" max="60" step="1" style="width:64px"> pcs</span><output></output></label>
+  <label style="grid-template-columns: 20px 1fr"><input id="housing" type="checkbox" checked> Screen housing parts on the sheet</label>
+  <div id="housingInfo" class="hint"></div>
   <label style="grid-template-columns: 20px 1fr"><input id="incBase" type="checkbox"> Also cut the base / sea plate</label>
   <label style="grid-template-columns: 20px 1fr"><input id="notes" type="checkbox" checked> Write laser instructions on the sheet</label>
   <div class="hint">The laser cuts exactly on the line, so pieces need no padding to come out right. A few mm keeps the thin strip between neighbours from burning through or shifting, so 2–4 mm is usual. 0 packs tightest.</div>
@@ -94,7 +97,9 @@
 <main>
   <div class="tabs">
     <button id="tab3d" class="on">3D model</button>
+    <button id="tabHousing">Housing 3D</button>
     <button id="tabSheet">Cutting sheet</button>
+    <label id="hBox">Explode <input id="hExplode" type="range" min="0" max="80" step="1" value="0" style="width:140px"> <output id="hExplodeOut">0 mm</output></label>
     <label id="zoomBox">Zoom <input id="sheetZoom" type="range" min="100" max="500" step="25" value="100" style="width:120px">
       <span style="margin-left:10px"><input id="showFree" type="checkbox" checked> Show free space</span></label>
   </div>
@@ -104,6 +109,7 @@
 </main>
 
 <script>
+const { housingParts, housingInfo, housingModel } = /*__HOUSING__*/;
 /*__CORE__*/
 </script>
 <script type="module">
@@ -303,12 +309,14 @@ function rebuild(refit) {
     model3d.add(o);
   }
   model3d.position.set(-FW / 2, 0, -FH / 2);
+  for (const o of model3d.children) if (o.isCSS2DObject) o.visible = model3d.visible;
   layout();
-  if (refit) fit();
+  if (refit && model3d.visible) fit();
   stats();
 }
 
 function layout() {
+  if (housing3d.visible) rebuildHousing();
   const t = state.thick, gap = state.explode;
   plates3d.forEach((m, k) => { m.scale.y = t; m.position.y = k * (t + gap); });
   etch3d.forEach((l, k) => { l.position.y = k * (t + gap) + t + 0.03; });
@@ -358,22 +366,158 @@ function stats() {
   const minutes = (len.cut / cutMMs + (len.score + len.etch) / etchMMs) / 60;
   const lo = minutes * 0.7, hi = minutes * 1.5;
   const cost = (m) => 200 + 150 * Math.max(0, Math.ceil(m / 60) - 1);
-  const space = sheetSpace(model, sheetSize()).at(-1);
+  const spaces = sheetSpace(model, sheetSize()), space = spaces.at(-1);
   $('laser').innerHTML = [
     ['Sheets needed', `<b>${bed.sheets.length}</b>${bed.tooBig.length ? ` <span class="warn">· too big: ${bed.tooBig.join(', ')}</span>` : ''}`],
     ...(space ? [
+      ...(sheetSize().keyrings ? [['Keyrings', `${spaces.reduce((t, x) => t + x.keyrings, 0)} of ${sheetSize().keyrings} fit${spaces.reduce((t, x) => t + x.keyrings, 0) < sheetSize().keyrings ? ' <span class="warn">(no room for the rest)</span>' : ''}`]] : []),
       ['Plywood used by pieces', `${space.materialPct.toFixed(0)}% of the sheet`],
       ['Free for other cuts', `<b>${Math.round(space.free.w)} × ${Math.round(space.free.h)} mm</b> largest block · ${space.freePct.toFixed(0)}% of the sheet${bed.sheets.length > 1 ? ' (last sheet)' : ''}`],
     ] : []),
-    ['All on one sheet from', `1:${fitScale(model, { one: true, ...sheetSize() }).toLocaleString('en')}`],
     ['Cut', `${(len.cut / 1000).toFixed(1)} m`],
     ['Score + etch', `${((len.score + len.etch) / 1000).toFixed(1)} m`],
     ['Laser time', `≈ ${Math.round(lo)}–${Math.round(hi)} min <span class="warn">rough guess</span>`],
     ['Workshop cost', `≈ ${cost(lo)}–${cost(hi)} kr + material`],
   ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+  if ($('housing').checked) {
+    const hi = housingInfo({ thickness: state.thick });
+    $('housingInfo').innerHTML = `<b>E-paper housing</b> ${hi.outside.w} × ${hi.outside.d} × ${hi.outside.h} mm outside (${hi.outside.wWithEars} wide with ear tips), window ${hi.window[0]} × ${hi.window[1]} mm, ${hi.parts.reduce((t, q) => t + q.qty, 0)} parts, ${hi.pins.count} pins of ${hi.pins.diameter} mm × ${hi.pins.length} mm.<ol style="margin:4px 0 0 16px;padding:0">${hi.steps.map((t) => `<li>${t}</li>`).join('')}</ol>${hi.warnings.map((w) => `<div class="warn">${w}</div>`).join('')}`;
+  } else $('housingInfo').innerHTML = '';
   $('plateList').innerHTML = [`<tr><td><span class="sw" style="background:#dcc197"></span></td><td>0 · base / sea${$('incBase').checked ? '' : ' · buy separately'}</td><td>${Math.round(fw)} × ${Math.round(fh)} mm</td></tr>`]
     .concat(model.layers.map((l) => `<tr><td><span class="sw" style="background:${l.n % 2 ? '#d2b585' : '#dcc197'}"></span></td><td>${l.n} · above ${l.level.toFixed(1)} m</td><td>${l.pieces.length} piece${l.pieces.length === 1 ? '' : 's'}</td></tr>`))
     .join('');
+}
+
+// ------------------------------------------------------------ housing 3D
+// The screen housing assembled from the same flat parts the laser cuts. Side plane
+// (u back, v up) maps to world (z = -u, y = v); x runs across, 0 at the left side's inner face.
+const housing3d = new THREE.Group();
+housing3d.visible = false;
+scene.add(housing3d);
+let housingPieces = [];
+const hMats = [0xdcc197, 0xd2b585, 0xc9a977].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8 }));
+const pinMat = new THREE.MeshStandardMaterial({ color: '#a8743a', roughness: 0.7 });
+const hPlain = (c, opacity = 1) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, transparent: opacity < 1, opacity });
+
+function rebuildHousing() {
+  for (const g of housing3d.children.slice()) { g.geometry?.dispose(); housing3d.remove(g); }
+  housingPieces = [];
+  const T = state.thick, M = housingModel({ thickness: T });
+  const parts = Object.fromEntries(housingParts({ thickness: T }).map((q) => [q.id, q]));
+  const { Wi, Hf, Hb, E, Pob, m, Ub, ub0, ut0, vT0, sideH, sin, cos, d, p } = M, Et = T - 0.3;
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const piece = (mesh, dir, label) => { mesh.castShadow = mesh.receiveShadow = true; mesh.userData = { dir, home: mesh.position.clone() }; housing3d.add(mesh); housingPieces.push(mesh); return mesh; };
+  const extrude = (part, map, bx, by, bz, origin, zShift, mat) => {
+    const tr = (poly) => poly.map(([x, y]) => new THREE.Vector2(...map(x, y)));
+    const shape = new THREE.Shape(tr(part.outer));
+    shape.holes = part.holes.map((h) => new THREE.Path(tr(h)));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: T, bevelEnabled: false, curveSegments: 1 });
+    geo.translate(0, 0, zShift);
+    geo.applyMatrix4(new THREE.Matrix4().makeBasis(bx, by, bz).setPosition(origin));
+    return new THREE.Mesh(geo, mat);
+  };
+  const out = V(0, sin, cos); // front plate: outward normal
+  const along = V(0, cos, -sin);
+  // Front: shape in (x across, s along the slope); outer face at local z = 0, plate behind it.
+  const frontMap = (x, y) => [x - E, Hf - y];
+  const frontMesh = extrude(parts.H1, frontMap, V(1, 0, 0), along, out, V(0, Pob[1], -Pob[0]), -T, hMats[0]);
+  piece(frontMesh, out.clone(), 'Front');
+  piece(extrude(parts.H2, (x, y) => [x - E, Hb - y], V(1, 0, 0), V(0, 1, 0), V(0, 0, 1), V(0, m, -(Ub + T)), 0, hMats[1]), V(0, 0, -1), 'Back');
+  piece(extrude(parts.H6, (x, y) => [x - Et, M.Lb - y], V(1, 0, 0), V(0, 0, -1), V(0, 1, 0), V(0, m, -ub0), 0, hMats[2]), V(0, -1, 0), 'Bottom');
+  piece(extrude(parts.H5, (x, y) => [x - Et, M.Lt - y], V(1, 0, 0), V(0, 0, -1), V(0, 1, 0), V(0, vT0, -ut0), 0, hMats[2]), V(0, 1, 0), 'Top');
+  const sideMap = (x, y) => [x, sideH - y];
+  piece(extrude(parts.H3, sideMap, V(0, 0, -1), V(0, 1, 0), V(1, 0, 0), V(-T, 0, 0), 0, hMats[1]), V(-1.5, 0, 0), 'Side');
+  piece(extrude(parts.H4, sideMap, V(0, 0, -1), V(0, 1, 0), V(1, 0, 0), V(Wi, 0, 0), 0, hMats[1]), V(1.5, 0, 0), 'Side (USB)');
+  // Rails and the screen sit against the Front's inner face.
+  const onFront = (xb, s, zl) => { // local (x across, s along, z outward) -> world
+    const o = V(0, Pob[1], -Pob[0]);
+    return o.add(V(1, 0, 0).multiplyScalar(xb)).add(along.clone().multiplyScalar(s)).add(out.clone().multiplyScalar(zl));
+  };
+  const frame = new THREE.Matrix4().makeBasis(V(1, 0, 0), along, out);
+  const sb = T / cos, st = Hf - (T * (1 - sin)) / cos, sMid = (sb + st) / 2;
+  const box = (w, h, dp, mat, at, dir) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, dp), mat);
+    mesh.quaternion.setFromRotationMatrix(frame);
+    mesh.position.copy(at);
+    return piece(mesh, dir, '');
+  };
+  const inward = out.clone().negate();
+  const [mw, mh] = p.module;
+  const gT = p.glassThickness, mT = p.moduleThickness, L = M.railLayers;
+  { // frame ring: the glass and screen pocket, glued to the Front's inner face
+    const rxs = parts.H7.outer.map((q) => q[0]), rys = parts.H7.outer.map((q) => q[1]), rw = Math.max(...rxs) - Math.min(...rxs), rh = Math.max(...rys) - Math.min(...rys), s0 = sMid - rh / 2, depth = L * T;
+    const shape = new THREE.Shape(parts.H7.outer.map(([x, y]) => new THREE.Vector2(x + (Wi - rw) / 2, s0 + rh - y)));
+    shape.holes = parts.H7.holes.map((h) => new THREE.Path(h.map(([x, y]) => new THREE.Vector2(x + (Wi - rw) / 2, s0 + rh - y))));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: 1 });
+    geo.translate(0, 0, -T - depth);
+    geo.applyMatrix4(new THREE.Matrix4().makeBasis(V(1, 0, 0), along, out).setPosition(V(0, Pob[1], -Pob[0])));
+    piece(new THREE.Mesh(geo, hMats[0]), out.clone(), 'Frame');
+  }
+  // Cover glass against the plate, then the screen behind it. The screen takes no shadow: it sits a hair
+  // from the glass and would show shadow-map stripes.
+  const glassMesh = box(M.glass[0], M.glass[1], gT, hPlain('#9fc7d8', 0.28), onFront(Wi / 2, sMid, -T - gT / 2), out.clone().multiplyScalar(-0.3));
+  glassMesh.castShadow = glassMesh.receiveShadow = false;
+  box(mw, mh, mT, hPlain('#2b2b2b'), onFront(Wi / 2, sMid, -T - gT - mT / 2), inward.clone().multiplyScalar(0.8)).receiveShadow = false;
+  box(p.opening[0] - 0.6, p.opening[1] - 0.6, 0.4, hPlain('#e9e6dc'), onFront(Wi / 2, sMid, -T - gT + 0.05), inward.clone().multiplyScalar(0.8)).receiveShadow = false;
+  // Electronics are placeholder blocks (sizes approximate).
+  // The ESP32 board lies against the Back, port at the right end facing the USB slot; the battery sits on the Bottom.
+  const board = new THREE.Mesh(new THREE.BoxGeometry(58, 26, 8), hPlain('#1f7a4d', 0.9));
+  board.position.set(Wi - 8 - 29, p.usbHeight, -(Ub - Math.max(0, p.usbDepth - 4) - 4));
+  piece(board, V(0, 0, -1), '');
+  const batt = new THREE.Mesh(new THREE.BoxGeometry(50, 8, 34), hPlain('#2d5fa8', 0.9));
+  batt.position.set(Wi * 0.3, m + T + 4, -(ub0 + M.Lb * 0.45));
+  piece(batt, V(0, -1, 0), '');
+  // Pins: through the hole in each ear, along the plate's normal.
+  const hx = T + d / 2 - 0.15, pinLen = T + 10;
+  const addPin = (center, axis, dir) => {
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(d / 2, d / 2, pinLen, 12), pinMat);
+    mesh.quaternion.setFromUnitVectors(V(0, 1, 0), axis.clone().normalize());
+    mesh.position.copy(center);
+    piece(mesh, dir, '');
+  };
+  for (const h of parts.H1.holes.slice(1)) {
+    const cx = h.reduce((t, q) => t + q[0], 0) / h.length - E, cs = Hf - h.reduce((t, q) => t + q[1], 0) / h.length;
+    addPin(onFront(cx, cs, -T / 2), out, V(Math.sign(cx - Wi / 2) * 2.2, 0, 0));
+  }
+  for (const h of parts.H2.holes.slice(1)) {
+    const cx = h.reduce((t, q) => t + q[0], 0) / h.length - E, cs = Hb - h.reduce((t, q) => t + q[1], 0) / h.length;
+    addPin(V(cx, m + cs, -(Ub + T / 2)), V(0, 0, 1), V(Math.sign(cx - Wi / 2) * 2.2, 0, 0));
+  }
+  housing3d.position.set(-Wi / 2, 0, M.sideD / 2);
+  placeHousing();
+}
+
+function placeHousing() {
+  const a = +$('hExplode').value;
+  $('hExplodeOut').value = `${a} mm`;
+  for (const m of housingPieces) m.position.copy(m.userData.home).addScaledVector(m.userData.dir, a);
+}
+$('hExplode').addEventListener('input', placeHousing);
+
+const cams = {};
+function showScene(t) {
+  const prev = cams.current;
+  if (prev) cams[prev] = { pos: camera.position.clone(), target: controls.target.clone() };
+  cams.current = t;
+  model3d.visible = t === '3d';
+  for (const o of model3d.children) if (o.isCSS2DObject) o.visible = t === '3d';
+  housing3d.visible = t === 'housing';
+  if (t === 'housing') rebuildHousing();
+  if (cams[t]) { camera.position.copy(cams[t].pos); controls.target.copy(cams[t].target); }
+  else if (t === 'housing') fitHousing();
+  else fit();
+  if (t === 'housing') setLights(260); else setLights(Math.max(model.frameW, model.frameH));
+}
+function setLights(s) {
+  sun.position.set(-s * 0.8, s * 1.4, s * 0.5);
+  const c = sun.shadow.camera;
+  c.left = c.bottom = -s * 0.8; c.right = c.top = s * 0.8; c.near = 1; c.far = s * 4; c.updateProjectionMatrix();
+}
+function fitHousing() {
+  camera.position.set(190, 170, 330);
+  controls.target.set(0, 65, 0);
+  camera.near = 2; camera.far = 6000; camera.updateProjectionMatrix();
+  table.scale.set(1600, 1600, 1);
 }
 
 // ------------------------------------------------------------ downloads
@@ -390,8 +534,8 @@ $('dlBed').onclick = async () => {
   for (let k = 0; k < sheets.length; k++) { download(`havsudden-bed-${k + 1}.svg`, sheets[k]); await new Promise((r) => setTimeout(r, 250)); }
 };
 const num = (id, fallback) => { const v = parseFloat($(id).value); return v >= 0 ? v : fallback; };
-const sheetSize = () => ({ bedW: +$('bedW').value || 1200, bedH: +$('bedH').value || 900, gap: num('gap', 4), margin: num('margin', 10), base: $('incBase').checked, notes: $('notes').checked, thick: state.thick });
-for (const id of ['bedW', 'bedH', 'gap', 'margin', 'incBase', 'notes']) $(id).addEventListener('input', () => stats());
+const sheetSize = () => ({ bedW: +$('bedW').value || 1200, bedH: +$('bedH').value || 900, gap: num('gap', 4), margin: num('margin', 10), base: $('incBase').checked, notes: $('notes').checked, thick: state.thick, keyrings: num('keyrings', 6), housing: $('housing').checked ? housingParts({ thickness: state.thick }) : null });
+for (const id of ['bedW', 'bedH', 'gap', 'margin', 'incBase', 'notes', 'keyrings', 'housing']) $(id).addEventListener('input', () => stats());
 $('dlBedDxf').onclick = async () => {
   const { sheets } = bedSheetsDXF(model, sheetSize());
   for (let k = 0; k < sheets.length; k++) { download(`havsudden-bed-${k + 1}.dxf`, sheets[k]); await new Promise((r) => setTimeout(r, 250)); }
@@ -418,13 +562,18 @@ function paintSheet() {
 function showTab(t) {
   tab = t;
   $('tab3d').classList.toggle('on', t === '3d');
+  $('tabHousing').classList.toggle('on', t === 'housing');
   $('tabSheet').classList.toggle('on', t === 'sheet');
-  $('view').style.display = t === '3d' ? '' : 'none';
+  $('view').style.display = t === 'sheet' ? 'none' : '';
   $('sheet').hidden = t !== 'sheet';
   $('zoomBox').style.display = t === 'sheet' ? 'inline-flex' : '';
-  if (t === 'sheet') paintSheet(); else resize();
+  $('hBox').style.display = t === 'housing' ? 'inline-flex' : '';
+  if (t === 'sheet') { paintSheet(); return; }
+  resize();
+  showScene(t);
 }
 $('tab3d').onclick = () => showTab('3d');
+$('tabHousing').onclick = () => showTab('housing');
 $('tabSheet').onclick = () => showTab('sheet');
 $('showFree').addEventListener('input', () => paintSheet());
 $('sheetZoom').addEventListener('input', () => { for (const s of $('sheet').querySelectorAll('svg')) s.style.width = `${$('sheetZoom').value}%`; });
@@ -451,6 +600,8 @@ resize();
 drawMap();
 rebuild(true);
 if (location.hash === '#sheet') showTab('sheet');
+const hh = location.hash.match(/^#housing(?:-(\d+))?$/);
+if (hh) { if (hh[1]) $('hExplode').value = hh[1]; showTab('housing'); }
 renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); labelRenderer.render(scene, camera); });
 </script>
 </body>
