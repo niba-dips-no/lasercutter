@@ -70,7 +70,7 @@ differ from the whole-area view (6.5 m vs 7.5 m steps).
 
 ## Forest hatching
 
-Forest on the peninsula is marked with 45° etched hairlines (off by default: `--hatch` or `--hatch 2.5` mm spacing on the CLI, "Hatch the forest" checkbox on the page; at 2.5 mm it adds ~17 m of etch). `--dots [3]` / "Dot the forest" is the second, independent style: 0.4 mm rings on a staggered grid, only where the whole dot sits on one plate; both can be on; bare rock, shore, roads
+Forest on the peninsula is marked with 45° etched hairlines (off by default: `--hatch` or `--hatch 2.5` mm spacing on the CLI, "Hatch the forest" checkbox on the page; at 2.5 mm it adds ~17 m of etch). `--dots [3]` / "Dot the forest" is the second, independent style: one 0.3 mm stroke per dot (one laser segment, faster than a ring) on a staggered grid, only where the whole dot sits on one plate; both can be on; bare rock, shore, roads
 and house outlines stay blank. OSM can't give this (it maps the whole interior as one `bare_rock` polygon), so
 `data/forest.json` is a 1-bit raster classified from a Google satellite screenshot by
 `node scripts/forest-mask.mjs "<screenshot.png>"` (dark non-blue pixels = forest; placed by a Web-Mercator fit matched to
