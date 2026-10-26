@@ -2,7 +2,7 @@
  * Laser-cut contour model of Havsudden, from the baked DEM.
  *
  *   node lasercut.mjs [--area ukintie|havsudden|all] [--plates 4]
- *                             [--thickness 6] [--scale one|N] [--margin 40] [--gap 4] [--base] [--no-notes] [--hatch [2.5]] [--dots [3]] [--keyrings 6] [--housing]
+ *                             [--thickness 6] [--scale one|N] [--margin 40] [--gap 4] [--base] [--no-notes] [--hatch [2.5]] [--dots [3]] [--keyrings 6] [--no-housing]
  *
  * Reads the baked DEM and OSM from havsudden-3d (--data, default
  * ../havsudden-3d/public/data — run `npm run bake` there first). Writes to out/:
@@ -64,7 +64,7 @@ const MARGIN_M = +(args.margin ?? 40);
 // The designed keyring (scripts/keyring-art.mjs makes it from assets/keyring.svg); without the file the keyrings are land-shaped tags.
 const KEYRING_FILE = path.join(HERE, 'data/keyring.json');
 const KEYRING_ART = fs.existsSync(KEYRING_FILE) ? JSON.parse(fs.readFileSync(KEYRING_FILE, 'utf8')) : null;
-const BED = { gap: +(args.gap ?? 4), base: 'base' in args, notes: !('no-notes' in args), thick: THICK, keyrings: +(args.keyrings ?? 6), keyringArt: KEYRING_ART, housing: 'housing' in args ? housingParts({ thickness: THICK }) : null };
+const BED = { gap: +(args.gap ?? 4), base: 'base' in args, notes: !('no-notes' in args), thick: THICK, keyrings: +(args.keyrings ?? 6), keyringArt: KEYRING_ART, housing: 'no-housing' in args ? null : housingParts({ thickness: THICK }) };
 const JOIN = +(args.join ?? 2);
 // Height of the lowest plate's outline (the coast), m. The peninsula goes as low as the smoothed DEM allows.
 const SEA = +(args.sea ?? AREAS[AREA].sea ?? 0.5);
@@ -190,7 +190,7 @@ console.log(`  ${model.layers.length + 1} plates × ${THICK} mm = ${(model.layer
 // ---------------------------------------------------------------- write
 
 fs.mkdirSync(OUT, { recursive: true });
-for (const old of fs.readdirSync(OUT)) if (/\.(svg|html|dxf|md)$/.test(old)) fs.rmSync(path.join(OUT, old));
+for (const old of fs.readdirSync(OUT)) if (/\.(svg|html|dxf)$/.test(old)) fs.rmSync(path.join(OUT, old));
 const write = (name, s) => { fs.writeFileSync(path.join(OUT, name), s); console.log(`  ${path.join(OUT, name)}  ${(s.length / 1024).toFixed(0)} KB`); };
 
 const placesMM = places
