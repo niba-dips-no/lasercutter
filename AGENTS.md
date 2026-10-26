@@ -18,7 +18,7 @@ node lasercut.mjs --scale one         # biggest model that nests on one sheet (a
 ```
 Reads `../havsudden-3d/public/data` (heightmap.bin/json, osm.json). Defaults: `--area havsudden`
 (peninsula only, cut at the user's red line, plus two islets; coast `--sea 0.1` m) at 1:2000 (frame 476 × 432 mm), 12 land plates (2 m/plate, ~3× vertical exaggeration; true scale would be ~4), 3 mm board, smoothing `--smooth 1` cell, gap 4 mm, edge margin 10 mm,
-6 keyrings, housing on. `out/` is generated and git-ignored.
+12 keyrings, housing on. `out/` is generated and git-ignored.
 
 ## Files
 

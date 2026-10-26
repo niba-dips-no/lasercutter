@@ -2,7 +2,7 @@
  * Laser-cut contour model of Havsudden, from the baked DEM.
  *
  *   node lasercut.mjs [--area ukintie|havsudden|all] [--plates 4]
- *                             [--thickness 6] [--scale one|N] [--margin 40] [--gap 4] [--base] [--no-notes] [--hatch [2.5]] [--dots [3]] [--keyrings 6] [--no-housing]
+ *                             [--thickness 6] [--scale one|N] [--margin 40] [--gap 4] [--base] [--no-notes] [--hatch [2.5]] [--dots [3]] [--keyrings 12] [--no-housing] [--housings 2]
  *
  * Reads the baked DEM and OSM from havsudden-3d (--data, default
  * ../havsudden-3d/public/data — run `npm run bake` there first). Writes to out/:
@@ -62,9 +62,9 @@ const MARGIN_M = +(args.margin ?? 40);
 // gap: mm between pieces on the bed sheet; base: also cut the base / sea plate (--base);
 // notes: laser instructions written into the sheet's free space (--no-notes to leave them off)
 // The designed keyring (scripts/keyring-art.mjs makes it from assets/keyring.svg); without the file the keyrings are land-shaped tags.
-const KEYRING_FILE = path.join(HERE, 'data/keyring.json');
+const KEYRING_FILE = path.resolve(HERE, args['keyring-art'] ?? 'data/keyring.json');
 const KEYRING_ART = fs.existsSync(KEYRING_FILE) ? JSON.parse(fs.readFileSync(KEYRING_FILE, 'utf8')) : null;
-const BED = { gap: +(args.gap ?? 4), base: 'base' in args, notes: !('no-notes' in args), thick: THICK, keyrings: +(args.keyrings ?? 6), keyringArt: KEYRING_ART, housing: 'no-housing' in args ? null : housingParts({ thickness: THICK }) };
+const BED = { gap: +(args.gap ?? 4), base: 'base' in args, notes: !('no-notes' in args), thick: THICK, keyrings: +(args.keyrings ?? 12), keyringArt: KEYRING_ART, housings: Math.max(1, Math.round(+(args.housings ?? 1))), housing: 'no-housing' in args ? null : housingParts({ thickness: THICK }) };
 const JOIN = +(args.join ?? 2);
 // Height of the lowest plate's outline (the coast), m. The peninsula goes as low as the smoothed DEM allows.
 const SEA = +(args.sea ?? AREAS[AREA].sea ?? 0.5);
@@ -206,11 +206,11 @@ bedSheetsDXF(model, BED).sheets.forEach((dx, k) => write(`bed-${k + 1}.dxf`, dx)
 write('base-guide.svg', baseGuideSVG(model));
 if (BED.housing) {
   const hi = housingInfo({ thickness: THICK });
-  write('housing.md', [`# E-paper housing (${THICK} mm board)`, '',
+  write('housing.md', [`# E-paper housing (${THICK} mm board)${BED.housings > 1 ? ` — ${BED.housings} housings` : ''}`, '',
     `Outside ${hi.outside.w} × ${hi.outside.d} × ${hi.outside.h} mm (width × depth × height), ${hi.outside.wWithEars} mm wide with the ear tips. Window ${hi.window[0]} × ${hi.window[1]} mm for a ${hi.module[0]} × ${hi.module[1]} mm module.`,
     `Inside: ${hi.inside.w} mm wide, ${hi.inside.depthBottom} mm deep at the bottom, ${hi.inside.depthTop} mm at the top, ${hi.inside.screenClear} mm clear height for the screen.`,
-    `Pins: ${hi.pins.note}, ${hi.pins.diameter} mm thick (skewers or dowel).`, '', '## Parts',
-    ...hi.parts.map((q) => `- ${q.id} ${q.name} ×${q.qty} — ${q.w} × ${q.h} mm`), '', '## Assembly',
+    `Pins: ${hi.pins.note}, ${hi.pins.diameter} mm thick (skewers or dowel).${BED.housings > 1 ? ` Quantities below are for all ${BED.housings} housings; ${hi.pins.count * BED.housings} pins in total.` : ''}`, '', '## Parts',
+    ...hi.parts.map((q) => `- ${q.id} ${q.name} ×${q.qty * BED.housings} — ${q.w} × ${q.h} mm`), '', '## Assembly',
     ...hi.steps.map((t, i) => `${i + 1}. ${t}`), '', ...(hi.warnings.length ? ['## Warnings', ...hi.warnings.map((w) => `- ${w}`), ''] : [])].join('\n'));
 }
 const len = lineLengths(model, BED);
@@ -221,7 +221,7 @@ console.log(`  lines: cut ${(len.cut / 1000).toFixed(1)} m · score ${(len.score
 
 // The page gets the whole smoothed grid (centimetres, Uint16) so any area can be picked.
 const cm = Uint16Array.from(grid, (v) => Math.round(Math.max(0, v) * 100));
-const data = { hatchMM: HATCH_MM, dotsMM: DOTS_MM, keyringArt: KEYRING_ART, W, H, cellM, places, features, rect, seed, join: JOIN, sea: SEA, cut, islets, only: !!mask, plates: PLATES, thick: THICK, scale: SCALE, grid: Buffer.from(cm.buffer).toString('base64') };
+const data = { housings: BED.housings, hatchMM: HATCH_MM, dotsMM: DOTS_MM, keyringArt: KEYRING_ART, W, H, cellM, places, features, rect, seed, join: JOIN, sea: SEA, cut, islets, only: !!mask, plates: PLATES, thick: THICK, scale: SCALE, grid: Buffer.from(cm.buffer).toString('base64') };
 const core = fs.readFileSync(path.join(HERE, 'lib/core.js'), 'utf8').replace(/^export /gm, '');
 // housing.js goes in as a function scope of its own so its helper names can't clash with core's.
 const housingSrc = '(() => {\n' + fs.readFileSync(path.join(HERE, 'lib/housing.js'), 'utf8').replace(/^export /gm, '') + '\nreturn { housingParts, housingInfo, housingModel, HOUSING_DEFAULTS };\n})()';

@@ -1,5 +1,6 @@
 // Keyring artwork → data/keyring.json.
-//   node scripts/keyring-art.mjs [assets/keyring.svg]
+//   node scripts/keyring-art.mjs [assets/keyring.svg] [--black 0.5] [--out data/keyring-coarse.json]
+//   (--black: spacing of the black hatch in mm, default 0.25; --out: output file, default data/keyring.json)
 // The SVG is a tag (an outline path: disc + rounded tab on top; a black circle where the punch hole goes)
 // with a helicopter drawn in black (and optionally white / cream / ochre; fills and strokes both work). Plywood only has "burnt" and "not burnt",
 // so the tones become line density on the one existing ETCH pen (black hairlines, 45°):
@@ -11,10 +12,12 @@
 // region is hatched. Art stays 0.6 mm off the cut edge and the hole. Output is in mm, origin top-left of the tag.
 import fs from 'node:fs';
 
-const SRC = process.argv[2] ?? 'assets/keyring.svg';
+const argv = process.argv.slice(2), opt = (k) => { const i = argv.indexOf(`--${k}`); return i < 0 ? undefined : argv[i + 1]; };
+const SRC = argv[0] && !argv[0].startsWith('--') ? argv[0] : 'assets/keyring.svg';
+const OUT = opt('out') ?? 'data/keyring.json';
 const TAG_W_MM = 35;               // width of the tag; the height follows
 const PX = 0.04;                   // mm per raster pixel
-const SPACING = { 3: 0.25, 2: 0.5 }; // tone → line spacing, mm; tones not listed stay bare
+const SPACING = { 3: +(opt('black') ?? 0.25), 2: 0.5 }; // tone → line spacing, mm; tones not listed stay bare
 const MARGIN = 0.6;                // art keeps this far from the cut edge / hole, mm
 const TONE = { '#ffffff': 0, white: 0, '#fee9c3': 1, '#e7b45f': 2, '#000000': 3, black: 3 };
 
@@ -153,6 +156,6 @@ const out = {
   etch,
 };
 fs.mkdirSync('data', { recursive: true });
-fs.writeFileSync('data/keyring.json', JSON.stringify(out));
-console.log(`data/keyring.json  ${out.w} × ${out.h} mm · hole Ø${r2(hole.r * 2)} mm, ${r2(hole.c[1] - hole.r)} mm of wood above it`);
-console.log(`  etch: ${etch.length} lines · black ${r2(lens[3])} mm · ochre ${r2(lens[2])} mm per tag · ${(fs.statSync('data/keyring.json').size / 1024).toFixed(0)} KB`);
+fs.writeFileSync(OUT, JSON.stringify(out));
+console.log(`${OUT}  ${out.w} × ${out.h} mm · hole Ø${r2(hole.r * 2)} mm, ${r2(hole.c[1] - hole.r)} mm of wood above it`);
+console.log(`  etch: ${etch.length} lines · black ${r2(lens[3])} mm · ochre ${r2(lens[2])} mm per tag · ${(fs.statSync(OUT).size / 1024).toFixed(0)} KB`);
