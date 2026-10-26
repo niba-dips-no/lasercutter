@@ -79,11 +79,11 @@ sorts them onto plates like roads; `pieceItems` clips them to each piece. Only t
 
 ## Keyring
 
-The keyring is the helicopter tag from `assets/keyring.svg` (59 × 65 mm: disc + rounded tab, Ø5.9 mm punch hole with 4.0 mm of
+The keyring is the helicopter tag from `assets/keyring.svg` (35 mm wide × 39.6 mm tall: disc + rounded tab, Ø5.25 mm punch hole with 2.6 mm of
 wood above it, for a split ring). `node scripts/keyring-art.mjs` turns it into `data/keyring.json` (outline, hole, etch hatch
 segments); `lasercut.mjs` passes it to core as `BED.keyringArt` and the page gets it as `DATA.keyringArt`. Plywood only has
 burnt / not burnt, so tone = line density on the one ETCH pen: black → 0.25 mm hatch, ochre → 0.5 mm, cream and white → bare
-wood. Art stays 0.6 mm off the edge and hole. Without `data/keyring.json` the keyrings fall back to land-shaped tags.
+wood (the current art is black only; the script also handles strokes). Art stays 0.6 mm off the edge and hole. Without `data/keyring.json` the keyrings fall back to land-shaped tags.
 
 ## Housing (lib/housing.js)
 

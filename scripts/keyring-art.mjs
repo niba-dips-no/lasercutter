@@ -1,7 +1,7 @@
 // Keyring artwork → data/keyring.json.
 //   node scripts/keyring-art.mjs [assets/keyring.svg]
-// The SVG is a tag (white disc + rounded tab on top, a black circle where the punch hole goes)
-// with a helicopter drawn in white / cream / ochre / black. Plywood only has "burnt" and "not burnt",
+// The SVG is a tag (an outline path: disc + rounded tab on top; a black circle where the punch hole goes)
+// with a helicopter drawn in black (and optionally white / cream / ochre; fills and strokes both work). Plywood only has "burnt" and "not burnt",
 // so the tones become line density on the one existing ETCH pen (black hairlines, 45°):
 //   black  → dense lines   (0.25 mm apart, reads solid)
 //   ochre  → medium lines  (0.5 mm, a lighter shade)
@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 
 const SRC = process.argv[2] ?? 'assets/keyring.svg';
-const TAG_MM = 65;                 // height of the tag, tab to bottom
+const TAG_W_MM = 35;               // width of the tag; the height follows
 const PX = 0.04;                   // mm per raster pixel
 const SPACING = { 3: 0.25, 2: 0.5 }; // tone → line spacing, mm; tones not listed stay bare
 const MARGIN = 0.6;                // art keeps this far from the cut edge / hole, mm
@@ -20,7 +20,7 @@ const TONE = { '#ffffff': 0, white: 0, '#fee9c3': 1, '#e7b45f': 2, '#000000': 3,
 
 const svg = fs.readFileSync(SRC, 'utf8');
 const [vbW, vbH] = svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/).slice(1).map(Number);
-const U = TAG_MM / vbH; // mm per svg unit
+const U = TAG_W_MM / vbW; // mm per svg unit
 const num = (el, k) => +el.match(new RegExp(`\\s${k}="([^"]*)"`))?.[1];
 const attr = (el, k) => el.match(new RegExp(`\\s${k}="([^"]*)"`))?.[1];
 
@@ -29,13 +29,6 @@ const ellipsePts = (cx, cy, rx, ry, rot = 0, n = 160) => Array.from({ length: n 
   const t = (k / n) * 2 * Math.PI, x = rx * Math.cos(t), y = ry * Math.sin(t), c = Math.cos(rot), s = Math.sin(rot);
   return [cx + x * c - y * s, cy + x * s + y * c];
 });
-const rectPts = (x, y, w, h, r) => {
-  const pts = [];
-  for (const [cx, cy, a0] of [[x + w - r, y + r, -90], [x + w - r, y + h - r, 0], [x + r, y + h - r, 90], [x + r, y + r, 180]]) {
-    for (let k = 0; k <= 12; k++) { const a = ((a0 + (k / 12) * 90) * Math.PI) / 180; pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
-  }
-  return pts;
-};
 function pathPolys(d) {
   const polys = [], t = d.match(/[MLHVCZ]|-?[\d.]+(?:e-?\d+)?/g);
   let i = 0, cur = null, x = 0, y = 0, sx = 0, sy = 0;
@@ -59,15 +52,18 @@ function pathPolys(d) {
   return polys;
 }
 
-// structure: disc, tab, then art (paths / ellipse), the hole circle last
-const disc = els[0], tab = els.find((e) => e.tag === 'rect'), holeEl = els.at(-1);
-if (disc.tag !== 'circle' || !tab || holeEl.tag !== 'circle') throw new Error('expected: disc circle, art, tab rect, hole circle');
-const art = els.slice(1).filter((e) => e !== tab && e !== holeEl).map((e) => ({
-  tone: TONE[attr(e.a, 'fill').toLowerCase()],
+// structure: the cut outline is the one path with an id (it lives in <defs>); the punch hole is the one circle
+// (black); a path with a mask is only the drawn border of the outline. Everything else is art.
+const outlineEl = els.find((e) => e.tag === 'path' && attr(e.a, 'id')), holeEl = els.find((e) => e.tag === 'circle');
+if (!outlineEl || !holeEl) throw new Error('expected an outline path with an id and one hole circle');
+const toneOf = (c) => (c && c !== 'none' ? TONE[c.toLowerCase()] : undefined);
+// a shape has a fill and/or a stroke (stroke-width, in svg units); no fill attribute = no fill
+const art = els.filter((e) => e !== outlineEl && e !== holeEl && !attr(e.a, 'mask')).map((e) => ({
+  tone: toneOf(attr(e.a, 'fill')), stroke: toneOf(attr(e.a, 'stroke')), sw: num(e.a, 'stroke-width') || 1,
   polys: e.tag === 'path' ? pathPolys(attr(e.a, 'd'))
     : [ellipsePts(num(e.a, 'cx'), num(e.a, 'cy'), num(e.a, 'rx'), num(e.a, 'ry'), (+attr(e.a, 'transform').match(/rotate\(([-\d.]+)/)[1] * Math.PI) / 180)],
 }));
-if (art.some((a) => a.tone === undefined)) throw new Error('unknown fill colour');
+if (art.some((a) => a.tone === undefined && a.stroke === undefined)) throw new Error('shape with an unknown fill / stroke colour');
 
 const RW = Math.ceil((vbW * U) / PX), RH = Math.ceil((vbH * U) / PX);
 const sc = U / PX; // px per svg unit
@@ -89,23 +85,32 @@ const fill = (grid, polys, value) => {
   }
 };
 const cls = new Uint8Array(RW * RH);
-for (const a of art) fill(cls, a.polys, a.tone);
-
-// the cut outline: disc ∪ tab, as a polygon in mm; the hole
-const cx = num(disc.a, 'cx'), cy = num(disc.a, 'cy'), R = num(disc.a, 'r');
-const tx = num(tab.a, 'x'), ty = num(tab.a, 'y') || 0, // y is left out of the SVG when it is 0
-   tw = num(tab.a, 'width'), th = num(tab.a, 'height'), tr = num(tab.a, 'rx');
-const sideY = cy - Math.sqrt(R * R - (cx - tx) ** 2); // where the tab's straight sides meet the disc
-const aSide = Math.atan2(sideY - cy, tx + tw - cx);   // angle of the right-hand junction (negative, near −90°)
-const outline = [];
-outline.push([tx, sideY]);
-for (const [ccx, ccy, a0] of [[tx + tr, ty + tr, 180], [tx + tw - tr, ty + tr, 270]]) {
-  for (let k = 0; k <= 12; k++) { const a = ((a0 + (k / 12) * 90) * Math.PI) / 180; outline.push([ccx + tr * Math.cos(a), ccy + tr * Math.sin(a)]); }
+// Strokes are stamped as discs along the outline (round joins and caps).
+const stroke = (grid, polys, value, sw) => {
+  const r = (sw * sc) / 2;
+  for (const p of polys) {
+    for (let k = 0; k < p.length - 1; k++) {
+      const [ax, ay] = [p[k][0] * sc, p[k][1] * sc], [bx, by] = [p[k + 1][0] * sc, p[k + 1][1] * sc];
+      const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 0.5));
+      for (let t = 0; t <= n; t++) {
+        const x = ax + ((bx - ax) * t) / n, y = ay + ((by - ay) * t) / n;
+        for (let py = Math.max(0, Math.floor(y - r)); py <= Math.min(RH - 1, Math.ceil(y + r)); py++) {
+          for (let px = Math.max(0, Math.floor(x - r)); px <= Math.min(RW - 1, Math.ceil(x + r)); px++) {
+            if ((px + 0.5 - x) ** 2 + (py + 0.5 - y) ** 2 <= r * r) grid[py * RW + px] = value;
+          }
+        }
+      }
+    }
+  }
+};
+for (const a of art) {
+  if (a.tone !== undefined) fill(cls, a.polys, a.tone);
+  if (a.stroke !== undefined) stroke(cls, a.polys, a.stroke, a.sw);
 }
-outline.push([tx + tw, sideY]);
-const steps = 240, a1 = aSide; // from the right junction clockwise round the bottom to the left one
-const aLeft = Math.atan2(sideY - cy, tx - cx) + 2 * Math.PI;
-for (let k = 1; k < steps; k++) { const a = a1 + ((aLeft - a1) * k) / steps; outline.push([cx + R * Math.cos(a), cy + R * Math.sin(a)]); }
+
+// the cut outline (flattened) and the hole, in svg units
+const outline = pathPolys(attr(outlineEl.a, 'd'))[0];
+if (outline.at(-1)[0] === outline[0][0] && outline.at(-1)[1] === outline[0][1]) outline.pop(); // closing point repeats the first
 const hole = { c: [num(holeEl.a, 'cx') * U, num(holeEl.a, 'cy') * U], r: num(holeEl.a, 'r') * U };
 
 // keep art off the edge and the hole: erode the "inside the tag" mask
