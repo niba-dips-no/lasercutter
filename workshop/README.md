@@ -7,5 +7,5 @@ Havsudden peninsula, 1:2000, 12 land plates (+ base, not on the sheet), 3 mm boa
 
 - `bed-1.svg` / `bed-1.dxf` — for the cutter (red cut, blue score, black etch; 0.025 mm hairlines, roads 0.8 mm)
 - `housing.md` — housing parts and assembly (quantities for both housings)
-- `plate-N.svg`, `plates-a3.svg`, `overview-a3.svg`, `base-guide.svg` — for looking at and gluing
+- `plate-N.svg`, `base-guide.svg` — for looking at and gluing
 - `index.html` — the interactive page
