@@ -451,7 +451,7 @@ function rebuildHousing() {
     const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: 1 });
     geo.translate(0, 0, -T - depth);
     geo.applyMatrix4(new THREE.Matrix4().makeBasis(V(1, 0, 0), along, out).setPosition(V(0, Pob[1], -Pob[0])));
-    piece(new THREE.Mesh(geo, hMats[0]), out.clone(), 'Frame');
+    piece(new THREE.Mesh(geo, hMats[0]), out.clone().multiplyScalar(0.5), 'Frame'); // glued to the Front, but pulled apart when exploded
   }
   // Cover glass against the plate, then the screen behind it. The screen takes no shadow: it sits a hair
   // from the glass and would show shadow-map stripes.
