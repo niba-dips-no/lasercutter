@@ -479,7 +479,7 @@ function rebuildHousing() {
     const cx = h.reduce((t, q) => t + q[0], 0) / h.length - E, cs = Hf - h.reduce((t, q) => t + q[1], 0) / h.length;
     addPin(onFront(cx, cs, -T / 2), out, V(Math.sign(cx - Wi / 2) * 2.2, 0, 0));
   }
-  for (const h of parts.H2.holes.slice(1)) {
+  for (const h of parts.H2.holes.slice(p.usbBack ? 1 : 0)) {
     const cx = h.reduce((t, q) => t + q[0], 0) / h.length - E, cs = Hb - h.reduce((t, q) => t + q[1], 0) / h.length;
     addPin(V(cx, m + cs, -(Ub + T / 2)), V(0, 0, 1), V(Math.sign(cx - Wi / 2) * 2.2, 0, 0));
   }
