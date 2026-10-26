@@ -77,6 +77,8 @@
   <label>Gap between pieces <span><input id="gap" type="number" value="4" min="0" step="0.5" style="width:64px"> mm</span><output></output></label>
   <label>Sheet edge margin <span><input id="margin" type="number" value="10" min="0" step="1" style="width:64px"> mm</span><output></output></label>
   <label>Keyrings <span><input id="keyrings" type="number" value="6" min="0" max="60" step="1" style="width:64px"> pcs</span><output></output></label>
+  <label style="grid-template-columns: 20px 1fr"><input id="housing" type="checkbox"> Screen housing parts on the sheet</label>
+  <div id="housingInfo" class="hint"></div>
   <label style="grid-template-columns: 20px 1fr"><input id="incBase" type="checkbox"> Also cut the base / sea plate</label>
   <label style="grid-template-columns: 20px 1fr"><input id="notes" type="checkbox" checked> Write laser instructions on the sheet</label>
   <div class="hint">The laser cuts exactly on the line, so pieces need no padding to come out right. A few mm keeps the thin strip between neighbours from burning through or shifting, so 2–4 mm is usual. 0 packs tightest.</div>
@@ -384,6 +386,10 @@ function stats() {
     ['Laser time', `≈ ${Math.round(lo)}–${Math.round(hi)} min <span class="warn">rough guess</span>`],
     ['Workshop cost', `≈ ${cost(lo)}–${cost(hi)} kr + material`],
   ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+  if ($('housing').checked) {
+    const hi = housingInfo({ thickness: state.thick });
+    $('housingInfo').innerHTML = `<b>E-paper housing</b> ${hi.outside.w} × ${hi.outside.d} × ${hi.outside.h} mm outside (${hi.outside.wWithEars} wide with ear tips), window ${hi.window[0]} × ${hi.window[1]} mm, ${hi.parts.reduce((t, q) => t + q.qty, 0)} parts, ${hi.pins.count} pins of ${hi.pins.diameter} mm × ${hi.pins.length} mm.<ol style="margin:4px 0 0 16px;padding:0">${hi.steps.map((t) => `<li>${t}</li>`).join('')}</ol>${hi.warnings.map((w) => `<div class="warn">${w}</div>`).join('')}`;
+  } else $('housingInfo').innerHTML = '';
   $('plateList').innerHTML = [`<tr><td><span class="sw" style="background:#dcc197"></span></td><td>0 · base / sea${$('incBase').checked ? '' : ' · buy separately'}</td><td>${Math.round(fw)} × ${Math.round(fh)} mm</td></tr>`]
     .concat(model.layers.map((l) => `<tr><td><span class="sw" style="background:${l.n % 2 ? '#d2b585' : '#dcc197'}"></span></td><td>${l.n} · above ${l.level.toFixed(1)} m</td><td>${l.pieces.length} piece${l.pieces.length === 1 ? '' : 's'}</td></tr>`))
     .join('');
@@ -535,8 +541,8 @@ $('dlBed').onclick = async () => {
   for (let k = 0; k < sheets.length; k++) { download(`havsudden-bed-${k + 1}.svg`, sheets[k]); await new Promise((r) => setTimeout(r, 250)); }
 };
 const num = (id, fallback) => { const v = parseFloat($(id).value); return v >= 0 ? v : fallback; };
-const sheetSize = () => ({ bedW: +$('bedW').value || 1200, bedH: +$('bedH').value || 900, gap: num('gap', 4), margin: num('margin', 10), base: $('incBase').checked, notes: $('notes').checked, thick: state.thick, keyrings: num('keyrings', 6), keyringArt: DATA.keyringArt });
-for (const id of ['bedW', 'bedH', 'gap', 'margin', 'incBase', 'notes', 'keyrings']) $(id).addEventListener('input', () => stats());
+const sheetSize = () => ({ bedW: +$('bedW').value || 1200, bedH: +$('bedH').value || 900, gap: num('gap', 4), margin: num('margin', 10), base: $('incBase').checked, notes: $('notes').checked, thick: state.thick, keyrings: num('keyrings', 6), keyringArt: DATA.keyringArt, housing: $('housing').checked ? housingParts({ thickness: state.thick }) : null });
+for (const id of ['bedW', 'bedH', 'gap', 'margin', 'incBase', 'notes', 'keyrings', 'housing']) $(id).addEventListener('input', () => stats());
 $('dlBedDxf').onclick = async () => {
   const { sheets } = bedSheetsDXF(model, sheetSize());
   for (let k = 0; k < sheets.length; k++) { download(`havsudden-bed-${k + 1}.dxf`, sheets[k]); await new Promise((r) => setTimeout(r, 250)); }

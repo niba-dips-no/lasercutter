@@ -2,7 +2,7 @@
  * Laser-cut contour model of Havsudden, from the baked DEM.
  *
  *   node lasercut.mjs [--area ukintie|havsudden|all] [--plates 4]
- *                             [--thickness 6] [--scale one|N] [--margin 40] [--gap 4] [--base] [--no-notes] [--hatch [2.5]] [--dots [3]] [--keyrings 6]
+ *                             [--thickness 6] [--scale one|N] [--margin 40] [--gap 4] [--base] [--no-notes] [--hatch [2.5]] [--dots [3]] [--keyrings 6] [--housing]
  *
  * Reads the baked DEM and OSM from havsudden-3d (--data, default
  * ../havsudden-3d/public/data — run `npm run bake` there first). Writes to out/:
@@ -28,6 +28,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { demPixelToWorld, latLonToWorld } from './vendor/projection.js';
 import { WAYPOINTS } from './vendor/waypoints.js';
+import { housingInfo, housingParts } from './lib/housing.js';
 import { baseGuideSVG, bedSheetsDXF, bedSheetsSVG, blur, buildModel, fitScale, landMask, lineLengths, overviewA3SVG, platesA3SVG, plateSVG, sheetSpace } from './lib/core.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -63,7 +64,7 @@ const MARGIN_M = +(args.margin ?? 40);
 // The designed keyring (scripts/keyring-art.mjs makes it from assets/keyring.svg); without the file the keyrings are land-shaped tags.
 const KEYRING_FILE = path.join(HERE, 'data/keyring.json');
 const KEYRING_ART = fs.existsSync(KEYRING_FILE) ? JSON.parse(fs.readFileSync(KEYRING_FILE, 'utf8')) : null;
-const BED = { gap: +(args.gap ?? 4), base: 'base' in args, notes: !('no-notes' in args), thick: THICK, keyrings: +(args.keyrings ?? 6), keyringArt: KEYRING_ART };
+const BED = { gap: +(args.gap ?? 4), base: 'base' in args, notes: !('no-notes' in args), thick: THICK, keyrings: +(args.keyrings ?? 6), keyringArt: KEYRING_ART, housing: 'housing' in args ? housingParts({ thickness: THICK }) : null };
 const JOIN = +(args.join ?? 2);
 // Height of the lowest plate's outline (the coast), m. The peninsula goes as low as the smoothed DEM allows.
 const SEA = +(args.sea ?? AREAS[AREA].sea ?? 0.5);
@@ -203,6 +204,15 @@ const bed = bedSheetsSVG(model, BED);
 bed.sheets.forEach((sv, k) => write(`bed-${k + 1}.svg`, sv));
 bedSheetsDXF(model, BED).sheets.forEach((dx, k) => write(`bed-${k + 1}.dxf`, dx));
 write('base-guide.svg', baseGuideSVG(model));
+if (BED.housing) {
+  const hi = housingInfo({ thickness: THICK });
+  write('housing.md', [`# E-paper housing (${THICK} mm board)`, '',
+    `Outside ${hi.outside.w} × ${hi.outside.d} × ${hi.outside.h} mm (width × depth × height), ${hi.outside.wWithEars} mm wide with the ear tips. Window ${hi.window[0]} × ${hi.window[1]} mm for a ${hi.module[0]} × ${hi.module[1]} mm module.`,
+    `Inside: ${hi.inside.w} mm wide, ${hi.inside.depthBottom} mm deep at the bottom, ${hi.inside.depthTop} mm at the top, ${hi.inside.screenClear} mm clear height for the screen.`,
+    `Pins: ${hi.pins.note}, ${hi.pins.diameter} mm thick (skewers or dowel).`, '', '## Parts',
+    ...hi.parts.map((q) => `- ${q.id} ${q.name} ×${q.qty} — ${q.w} × ${q.h} mm`), '', '## Assembly',
+    ...hi.steps.map((t, i) => `${i + 1}. ${t}`), '', ...(hi.warnings.length ? ['## Warnings', ...hi.warnings.map((w) => `- ${w}`), ''] : [])].join('\n'));
+}
 const len = lineLengths(model, BED);
 console.log(`  bed 1200×900: ${bed.sheets.length} sheet${bed.sheets.length === 1 ? '' : 's'}${bed.tooBig.length ? ` · too big for the bed: ${bed.tooBig.join(', ')}` : ''} · all pieces on one sheet from 1:${fitScale(model, { one: true, ...BED })}`);
 const space = sheetSpace(model, BED).at(-1);
