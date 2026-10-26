@@ -68,6 +68,23 @@ The default area. `AREAS.havsudden` in `lasercut.mjs` holds a `cut` line (lat/lo
 "lower-right corner differs between views" report). Peninsula-only also changes the top height, so plate levels
 differ from the whole-area view (6.5 m vs 7.5 m steps).
 
+## Forest hatching
+
+Forest on the peninsula is marked with 45° etched hairlines (off by default: `--hatch` or `--hatch 2.5` mm spacing on the CLI, "Hatch the forest" checkbox on the page; at 2.5 mm it adds ~17 m of etch). `--dots [3]` / "Dot the forest" is the second, independent style: 0.4 mm rings on a staggered grid, only where the whole dot sits on one plate; both can be on; bare rock, shore, roads
+and house outlines stay blank. OSM can't give this (it maps the whole interior as one `bare_rock` polygon), so
+`data/forest.json` is a 1-bit raster classified from a Google satellite screenshot by
+`node scripts/forest-mask.mjs "<screenshot.png>"` (dark non-blue pixels = forest; placed by a Web-Mercator fit matched to
+the OSM roads). `lasercut.mjs` lays it on the grid with an affine, `etchDetails` → `forestHatch` marches the lines in mm and
+sorts them onto plates like roads; `pieceItems` clips them to each piece. Only the visible terrace band of each plate gets hatch.
+
+## Keyring
+
+The keyring is the helicopter tag from `assets/keyring.svg` (59 × 65 mm: disc + rounded tab, Ø5.9 mm punch hole with 4.0 mm of
+wood above it, for a split ring). `node scripts/keyring-art.mjs` turns it into `data/keyring.json` (outline, hole, etch hatch
+segments); `lasercut.mjs` passes it to core as `BED.keyringArt` and the page gets it as `DATA.keyringArt`. Plywood only has
+burnt / not burnt, so tone = line density on the one ETCH pen: black → 0.25 mm hatch, ochre → 0.5 mm, cream and white → bare
+wood. Art stays 0.6 mm off the edge and hole. Without `data/keyring.json` the keyrings fall back to land-shaped tags.
+
 ## Housing (lib/housing.js)
 
 Wedge leaning back 12°, window exactly 165 × 100 mm, 6 mm board by default (params scale to 3/4 mm).

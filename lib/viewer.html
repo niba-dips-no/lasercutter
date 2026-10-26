@@ -57,6 +57,8 @@
   <div class="hint">Drag on the map to choose the area · drag inside the box to move it.</div>
   <label style="grid-template-columns: 20px 1fr"><input id="only" type="checkbox"> Peninsula only — cut off at the neck</label>
   <label style="grid-template-columns: 20px 1fr"><input id="etch" type="checkbox" checked> Etch roads, paths and houses</label>
+  <label style="grid-template-columns: 20px 1fr" title="Diagonal etched lines over the forest (peninsula only). Adds a lot of etch time."><input id="hatch" type="checkbox"> Hatch the forest (lines)</label>
+  <label style="grid-template-columns: 20px 1fr" title="Small etched dots over the forest (peninsula only). Adds etch time."><input id="dots" type="checkbox"> Dot the forest</label>
 
   <h2>Plates</h2>
   <label>Land plates <input id="plates" type="range" min="1" max="12" step="1"><output id="platesOut"></output></label>
@@ -125,7 +127,7 @@ const grid = Float32Array.from(cm, (v) => v / 100);
 
 // The peninsula, cut off at its low neck — everything else can be dropped to sea.
 const land = DATA.seed ? landMask(grid, W, H, DATA.seed[0], DATA.seed[1], { join: DATA.join, sea: DATA.sea, cut: DATA.cut, islets: DATA.islets }) : null;
-const state = { only: !!land && DATA.only, etch: true, rect: { ...DATA.rect }, plates: DATA.plates, thick: DATA.thick, scale: DATA.scale, explode: 0 };
+const state = { only: !!land && DATA.only, etch: true, hatch: !!DATA.features.hatch, dots: !!DATA.features.dots, rect: { ...DATA.rect }, plates: DATA.plates, thick: DATA.thick, scale: DATA.scale, explode: 0 };
 
 // ------------------------------------------------------------ map
 const map = document.getElementById('map');
@@ -201,6 +203,10 @@ $('only').checked = state.only;
 $('only').disabled = !land;
 $('only').addEventListener('change', () => { state.only = $('only').checked; drawMap(); schedule(true); });
 $('etch').addEventListener('change', () => { state.etch = $('etch').checked; schedule(true); });
+$('hatch').checked = state.hatch;
+$('hatch').addEventListener('change', () => { state.hatch = $('hatch').checked; schedule(true); });
+$('dots').checked = state.dots;
+$('dots').addEventListener('change', () => { state.dots = $('dots').checked; schedule(true); });
 scaleSel.addEventListener('change', () => { state.scale = +scaleSel.value; schedule(true, true); });
 
 let pending = null;
@@ -259,7 +265,7 @@ function cropGrid() {
 function rebuild(refit) {
   sub = cropGrid();
   model = buildModel(sub.g, sub.w, sub.h, { cellM, scale: state.scale, sea: DATA.sea, plates: state.plates, tol: 0.15, minArea: 6,
-    features: state.etch ? DATA.features : null, offset: [state.rect.i0, state.rect.j0] });
+    features: state.etch ? { ...DATA.features, hatch: state.hatch ? DATA.hatchMM : 0, dots: state.dots ? DATA.dotsMM : 0 } : null, offset: [state.rect.i0, state.rect.j0] });
   for (const m of model3d.children.slice()) { m.geometry?.dispose(); model3d.remove(m); }
   plates3d = [];
   const { frameW: FW, frameH: FH } = model;
@@ -290,6 +296,7 @@ function rebuild(refit) {
     };
     for (const p of d.roads) add(p, false);
     for (const p of d.paths) add(p, false);
+    for (const p of d.hatch) add(p, false);
     for (const p of d.houses) add(p, true);
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
@@ -534,7 +541,7 @@ $('dlBed').onclick = async () => {
   for (let k = 0; k < sheets.length; k++) { download(`havsudden-bed-${k + 1}.svg`, sheets[k]); await new Promise((r) => setTimeout(r, 250)); }
 };
 const num = (id, fallback) => { const v = parseFloat($(id).value); return v >= 0 ? v : fallback; };
-const sheetSize = () => ({ bedW: +$('bedW').value || 1200, bedH: +$('bedH').value || 900, gap: num('gap', 4), margin: num('margin', 10), base: $('incBase').checked, notes: $('notes').checked, thick: state.thick, keyrings: num('keyrings', 6), housing: $('housing').checked ? housingParts({ thickness: state.thick }) : null });
+const sheetSize = () => ({ bedW: +$('bedW').value || 1200, bedH: +$('bedH').value || 900, gap: num('gap', 4), margin: num('margin', 10), base: $('incBase').checked, notes: $('notes').checked, thick: state.thick, keyrings: num('keyrings', 6), keyringArt: DATA.keyringArt, housing: $('housing').checked ? housingParts({ thickness: state.thick }) : null });
 for (const id of ['bedW', 'bedH', 'gap', 'margin', 'incBase', 'notes', 'keyrings', 'housing']) $(id).addEventListener('input', () => stats());
 $('dlBedDxf').onclick = async () => {
   const { sheets } = bedSheetsDXF(model, sheetSize());

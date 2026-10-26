@@ -2,7 +2,7 @@
  * Laser-cut contour model of Havsudden, from the baked DEM.
  *
  *   node lasercut.mjs [--area ukintie|havsudden|all] [--plates 4]
- *                             [--thickness 6] [--scale one|N] [--margin 40] [--gap 4] [--base] [--no-notes] [--keyrings 6] [--no-housing]
+ *                             [--thickness 6] [--scale one|N] [--margin 40] [--gap 4] [--base] [--no-notes] [--hatch [2.5]] [--dots [3]] [--keyrings 6] [--no-housing]
  *
  * Reads the baked DEM and OSM from havsudden-3d (--data, default
  * ../havsudden-3d/public/data — run `npm run bake` there first). Writes to out/:
@@ -61,7 +61,10 @@ const SCALE_ARG = args.scale ?? AREAS[AREA].scale;
 const MARGIN_M = +(args.margin ?? 40);
 // gap: mm between pieces on the bed sheet; base: also cut the base / sea plate (--base);
 // notes: laser instructions written into the sheet's free space (--no-notes to leave them off)
-const BED = { gap: +(args.gap ?? 4), base: 'base' in args, notes: !('no-notes' in args), thick: THICK, keyrings: +(args.keyrings ?? 6), housing: 'no-housing' in args ? null : housingParts({ thickness: THICK }) };
+// The designed keyring (scripts/keyring-art.mjs makes it from assets/keyring.svg); without the file the keyrings are land-shaped tags.
+const KEYRING_FILE = path.join(HERE, 'data/keyring.json');
+const KEYRING_ART = fs.existsSync(KEYRING_FILE) ? JSON.parse(fs.readFileSync(KEYRING_FILE, 'utf8')) : null;
+const BED = { gap: +(args.gap ?? 4), base: 'base' in args, notes: !('no-notes' in args), thick: THICK, keyrings: +(args.keyrings ?? 6), keyringArt: KEYRING_ART, housing: 'no-housing' in args ? null : housingParts({ thickness: THICK }) };
 const JOIN = +(args.join ?? 2);
 // Height of the lowest plate's outline (the coast), m. The peninsula goes as low as the smoothed DEM allows.
 const SEA = +(args.sea ?? AREAS[AREA].sea ?? 0.5);
@@ -135,6 +138,26 @@ if (bbox) {
 const osm = JSON.parse(fs.readFileSync(path.join(DATA, 'osm.json'), 'utf8'));
 const PATHS = new Set(['path', 'footway', 'track', 'cycleway', 'steps', 'bridleway']);
 const features = { roads: [], paths: [], houses: [] };
+// Forest hatching: the raster from scripts/forest-mask.mjs, laid on the grid by three corner points.
+// Off unless --hatch (45° lines, optional spacing in mm, default 2.5) and/or --dots (rings, spacing default 3) are given: they add a lot of etch time.
+// The raster always goes to the page so its checkbox can switch hatching on. Only the peninsula is covered.
+const HATCH_MM = +args.hatch || 2.5, HATCH = 'hatch' in args ? HATCH_MM : 0;
+const DOTS_MM = +args.dots || 3, DOTS = 'dots' in args ? DOTS_MM : 0;
+const forestFile = path.join(HERE, 'data/forest.json');
+if (fs.existsSync(forestFile)) {
+  const fo = JSON.parse(fs.readFileSync(forestFile, 'utf8'));
+  const at = (x, y) => {
+    const m = fo.merc0 + y * fo.mercStep;
+    return toGrid((Math.atan(Math.sinh((m * Math.PI) / 180)) * 180) / Math.PI, fo.lon0 + x * fo.lonStep);
+  };
+  const g0 = at(0, 0), g1 = at(fo.w, 0), g2 = at(0, fo.h);
+  const ax = (g1[0] - g0[0]) / fo.w, ay = (g1[1] - g0[1]) / fo.w, bx = (g2[0] - g0[0]) / fo.h, by = (g2[1] - g0[1]) / fo.h;
+  const det = ax * by - bx * ay; // grid = g0 + [ax bx; ay by]·(x, y); invert
+  const a = by / det, b = -bx / det, d = -ay / det, e = ax / det;
+  features.forest = { w: fo.w, h: fo.h, bits: fo.bits, to: [a, b, -(a * g0[0] + b * g0[1]), d, e, -(d * g0[0] + e * g0[1])] };
+  features.hatch = HATCH;
+  features.dots = DOTS;
+}
 for (const way of osm.ways) {
   const t = way.tags ?? {};
   const kind = t.building ? 'houses' : t.highway ? (PATHS.has(t.highway) ? 'paths' : 'roads') : null;
@@ -198,7 +221,7 @@ console.log(`  lines: cut ${(len.cut / 1000).toFixed(1)} m · score ${(len.score
 
 // The page gets the whole smoothed grid (centimetres, Uint16) so any area can be picked.
 const cm = Uint16Array.from(grid, (v) => Math.round(Math.max(0, v) * 100));
-const data = { W, H, cellM, places, features, rect, seed, join: JOIN, sea: SEA, cut, islets, only: !!mask, plates: PLATES, thick: THICK, scale: SCALE, grid: Buffer.from(cm.buffer).toString('base64') };
+const data = { hatchMM: HATCH_MM, dotsMM: DOTS_MM, keyringArt: KEYRING_ART, W, H, cellM, places, features, rect, seed, join: JOIN, sea: SEA, cut, islets, only: !!mask, plates: PLATES, thick: THICK, scale: SCALE, grid: Buffer.from(cm.buffer).toString('base64') };
 const core = fs.readFileSync(path.join(HERE, 'lib/core.js'), 'utf8').replace(/^export /gm, '');
 // housing.js goes in as a function scope of its own so its helper names can't clash with core's.
 const housingSrc = '(() => {\n' + fs.readFileSync(path.join(HERE, 'lib/housing.js'), 'utf8').replace(/^export /gm, '') + '\nreturn { housingParts, housingInfo, housingModel, HOUSING_DEFAULTS };\n})()';

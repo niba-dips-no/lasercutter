@@ -17,7 +17,7 @@ node lasercut.mjs --gap 3 --keyrings 10   # 3 mm between pieces, ten keyrings in
 ```
 
 The cutting sheet nests the irregular pieces into each other's gaps (turned in
-quarter turns), then fills what is left with keyrings. The base / sea plate is
+quarter turns), then fills what is left with keyrings (the helicopter tag from `assets/keyring.svg`). The base / sea plate is
 bought separately and left off the sheet unless you pass `--base`;
 `base-guide.svg` shows where plate 1 goes on it.
 
@@ -37,7 +37,7 @@ Three.js from a CDN, so it needs a connection.
 | `plate-N.svg` | each plate at true scale on the full frame |
 
 Colours: **red** cut · **blue** score (outline of the plate above — where it's
-glued) · **black** etched roads, paths, houses.
+glued) · **black** etched roads, paths, houses and forest hatching or dots (opt-in with `--hatch` / `--dots`).
 
 Elevation: NLS Finland korkeusmalli 2 m (CC BY 4.0). Map data © OpenStreetMap
 contributors (ODbL).
