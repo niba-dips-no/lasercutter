@@ -50,6 +50,10 @@ Reads `../havsudden-3d/public/data` (heightmap.bin/json, osm.json). Defaults: `-
   and where plate 1 goes.
 - Sheet notes (green text) go bottom-left of the largest free block; `--no-notes` / page checkbox turns them off.
 
+## Split export
+
+`out/` also gets `1-etch-bed-N.svg/.dxf` (black etch + blue score + labels, run first) and `2-cut-bed-N.svg/.dxf` (red only): `bedSheetsSVG` / `bedSheetsDXF` with `pass: 'etch' | 'cut'` filter the finished sheet by stroke colour, so geometry matches `bed-N`. Both carry two grey registration crosses (DXF layer REGISTER) for aligning the files, because the shop's software (FlexiDESIGNER was mentioned) may place imports by content bounds, which differ between the files. Not verified: how FlexiDESIGNER imports them, or whether it needs those crosses. `bedSheetsAI` writes the same sheets as a PDF-compatible `.ai` (PDF 1.5, hand-written, one optional-content layer per pen, labels as live Helvetica text; checked with `pdfinfo`/`pdftoppm`, not opened in Illustrator, so layers and text are unverified there). The page has one button, "Laser files: 1 etch + 2 cut, as SVG, DXF and AI" (it replaced the old combined-sheet buttons), which downloads every file per sheet; the CLI writes all of them to `out/`, and `workshop/` holds only the split files.
+
 ## Nesting (core.js)
 
 Raster nesting on a grid of R = clamp(gap/2, 1.5, 3) mm: each piece rasterised in rotations 0/90/180/270

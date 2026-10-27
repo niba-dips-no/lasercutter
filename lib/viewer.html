@@ -91,8 +91,8 @@
   <div class="hint">The bed is 1200 × 900. Set the sheet to the size of the plywood you buy if it's smaller.</div>
 
   <h2>Download</h2>
-  <button id="dlBed">Bed sheets 1200 × 900 — true scale</button>
-  <button id="dlBedDxf">Bed sheets as DXF</button>
+  <button id="dlBedAll">Laser files: 1 etch + 2 cut, as SVG, DXF and AI</button>
+  <div class="hint">Per sheet: etch (black + blue) first, then cut (red). Same size and position, so they register. AI opens in Illustrator (PDF inside).</div>
   <button id="dlBase">Base plate guide — true scale</button>
   <button id="dlSheet">A3 sheet — all plates</button>
   <button id="dlOverview">A3 overview map</button>
@@ -534,16 +534,12 @@ function fitHousing() {
 // ------------------------------------------------------------ downloads
 const download = (name, text) => {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], { type: name.endsWith('.dxf') ? 'image/vnd.dxf' : 'image/svg+xml' }));
+  a.href = URL.createObjectURL(new Blob([text], { type: name.endsWith('.dxf') ? 'image/vnd.dxf' : name.endsWith('.ai') ? 'application/pdf' : 'image/svg+xml' }));
   a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 const placesMM = () => places.map((p) => ({ name: p.name, at: [model.mm((p.gi - state.rect.i0 + 0.5) * cellM), model.mm((p.gj - state.rect.j0 + 0.5) * cellM)] }))
   .filter(({ at: [x, y] }) => x > 0 && y > 0 && x < model.frameW && y < model.frameH);
-$('dlBed').onclick = async () => {
-  const { sheets } = bedSheetsSVG(model, sheetSize());
-  for (let k = 0; k < sheets.length; k++) { download(`havsudden-bed-${k + 1}.svg`, sheets[k]); await new Promise((r) => setTimeout(r, 250)); }
-};
 const num = (id, fallback) => { const v = parseFloat($(id).value); return v >= 0 ? v : fallback; };
 $('housings').value = DATA.housings ?? 1;
 $('keyrings').value = DATA.keyrings ?? 12;
@@ -551,9 +547,15 @@ $('dogsOn').checked = (DATA.dogs ?? 0) > 0;
 $('dogs').value = DATA.dogs || 1;
 const sheetSize = () => ({ bedW: +$('bedW').value || 1200, bedH: +$('bedH').value || 900, gap: num('gap', 4), margin: num('margin', 10), base: $('incBase').checked, notes: $('notes').checked, thick: state.thick, keyrings: num('keyrings', 12), keyringArt: DATA.keyringArt, dogs: $('dogsOn').checked ? Math.max(1, num('dogs', 1)) : 0, dogArt: DATA.dogArt, housing: $('housing').checked ? housingParts({ thickness: state.thick }) : null, housings: Math.max(1, num('housings', 1)) });
 for (const id of ['bedW', 'bedH', 'gap', 'margin', 'incBase', 'notes', 'keyrings', 'dogsOn', 'dogs', 'housing', 'housings']) $(id).addEventListener('input', () => stats());
-$('dlBedDxf').onclick = async () => {
-  const { sheets } = bedSheetsDXF(model, sheetSize());
-  for (let k = 0; k < sheets.length; k++) { download(`havsudden-bed-${k + 1}.dxf`, sheets[k]); await new Promise((r) => setTimeout(r, 250)); }
+// One button, every laser file: per job (1 etch, 2 cut) and sheet, as SVG, DXF and AI. The browser may ask once to allow several downloads.
+$('dlBedAll').onclick = async () => {
+  for (const [n, pass] of [[1, 'etch'], [2, 'cut']]) {
+    const opt = { ...sheetSize(), pass };
+    for (const [ext, make] of [['svg', bedSheetsSVG], ['dxf', bedSheetsDXF], ['ai', bedSheetsAI]]) {
+      const { sheets } = make(model, opt);
+      for (let k = 0; k < sheets.length; k++) { download(`havsudden-${n}-${pass}-bed-${k + 1}.${ext}`, sheets[k]); await new Promise((r) => setTimeout(r, 300)); }
+    }
+  }
 };
 $('dlBase').onclick = () => download('havsudden-base-guide.svg', baseGuideSVG(model));
 

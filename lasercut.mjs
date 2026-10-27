@@ -16,6 +16,8 @@
  *                     --base the base / sea plate is left off — buy it separately
  *   bed-N.dxf         the same sheets as DXF (layers CUT / SCORE / ETCH), if the
  *                     shop's software wants that instead of SVG
+ *   1-etch-bed-N.svg  the same sheets split by laser job (+ .dxf, + .ai for Illustrator): 1 = etch and score, run first;
+ *   2-cut-bed-N.svg   2 = cut. Same size and coordinates, grey registration crosses in both
  *   base-guide.svg   the base plate's outline and where plate 1 goes, true scale
  *
  * Roads, paths and houses from the baked OSM are etched (black) on the plate
@@ -29,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 import { demPixelToWorld, latLonToWorld } from './vendor/projection.js';
 import { WAYPOINTS } from './vendor/waypoints.js';
 import { housingInfo, housingParts } from './lib/housing.js';
-import { baseGuideSVG, bedSheetsDXF, bedSheetsSVG, blur, buildModel, fitScale, landMask, lineLengths, overviewA3SVG, platesA3SVG, plateSVG, sheetSpace } from './lib/core.js';
+import { baseGuideSVG, bedSheetsAI, bedSheetsDXF, bedSheetsSVG, blur, buildModel, fitScale, landMask, lineLengths, overviewA3SVG, platesA3SVG, plateSVG, sheetSpace } from './lib/core.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(
@@ -207,6 +209,12 @@ for (let k = 0; k <= model.layers.length; k++) write(`plate-${k}.svg`, plateSVG(
 const bed = bedSheetsSVG(model, BED);
 bed.sheets.forEach((sv, k) => write(`bed-${k + 1}.svg`, sv));
 bedSheetsDXF(model, BED).sheets.forEach((dx, k) => write(`bed-${k + 1}.dxf`, dx));
+// The two laser jobs as separate files, in running order: 1 = etch (black etch + blue score), 2 = cut (red).
+for (const [n, pass] of [[1, 'etch'], [2, 'cut']]) {
+  bedSheetsSVG(model, { ...BED, pass }).sheets.forEach((sv, k) => write(`${n}-${pass}-bed-${k + 1}.svg`, sv));
+  bedSheetsDXF(model, { ...BED, pass }).sheets.forEach((dx, k) => write(`${n}-${pass}-bed-${k + 1}.dxf`, dx));
+  bedSheetsAI(model, { ...BED, pass }).sheets.forEach((ai, k) => write(`${n}-${pass}-bed-${k + 1}.ai`, ai));
+}
 write('base-guide.svg', baseGuideSVG(model));
 if (BED.housing) {
   const hi = housingInfo({ thickness: THICK });
