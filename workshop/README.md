@@ -1,6 +1,8 @@
 # Workshop files
 
-Two jobs for the laser, run in this order (each as SVG, DXF or AI, whichever the software takes; the AI files are PDF inside, with one layer per pen, and open in Illustrator):
+**Simplest: `laser-bed-1.ai` (or `.svg`, same content)** — everything in one file, two colours: black = etch, red = cut. Flattened for Illustrator: three compound paths (etch, roads, cut), no groups, layers, transforms or text, so no piece numbers (use the split files below if you want those). Roads are a separate black path because they are 0.8 mm strokes; everything else is a 0.025 mm hairline. Etch black first, then cut red.
+
+Or two jobs for the laser, run in this order (each as SVG, DXF or AI, whichever the software takes; the AI files are PDF inside, with one layer per pen, and open in Illustrator):
 
 1. `1-etch-bed-1` — etching: black etch (roads, paths, houses, forest dots, dog and keyring art) and blue score (outlines where plates are glued, piece numbers).
 2. `2-cut-bed-1` — cutting: red lines only, every piece, the housing parts, keyring and dog discs and their holes.

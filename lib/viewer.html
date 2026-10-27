@@ -92,6 +92,8 @@
 
   <h2>Download</h2>
   <button id="dlBedAll">Laser files: 1 etch + 2 cut, as SVG, DXF and AI</button>
+  <button id="dlBedFlat">One simple file: etch + cut, 2 colours (SVG + AI)</button>
+  <div class="hint">Flattened for Illustrator: black = etch, red = cut, all in one file, no groups, layers or text (so no piece numbers).</div>
   <div class="hint">Per sheet: etch (black + blue) first, then cut (red). Same size and position, so they register. AI opens in Illustrator (PDF inside).</div>
   <button id="dlBase">Base plate guide — true scale</button>
   <button id="dlSheet">A3 sheet — all plates</button>
@@ -555,6 +557,13 @@ $('dlBedAll').onclick = async () => {
       const { sheets } = make(model, opt);
       for (let k = 0; k < sheets.length; k++) { download(`havsudden-${n}-${pass}-bed-${k + 1}.${ext}`, sheets[k]); await new Promise((r) => setTimeout(r, 300)); }
     }
+  }
+};
+$('dlBedFlat').onclick = async () => {
+  const { svg, ai } = bedSheetsFlat(model, sheetSize());
+  for (let k = 0; k < svg.length; k++) {
+    download(`havsudden-laser-bed-${k + 1}.svg`, svg[k]); await new Promise((r) => setTimeout(r, 300));
+    download(`havsudden-laser-bed-${k + 1}.ai`, ai[k]); await new Promise((r) => setTimeout(r, 300));
   }
 };
 $('dlBase').onclick = () => download('havsudden-base-guide.svg', baseGuideSVG(model));
