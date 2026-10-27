@@ -2,7 +2,7 @@
  * Laser-cut contour model of Havsudden, from the baked DEM.
  *
  *   node lasercut.mjs [--area ukintie|havsudden|all] [--plates 4]
- *                             [--thickness 6] [--scale one|N] [--margin 40] [--gap 4] [--base] [--no-notes] [--hatch [2.5]] [--dots [3]] [--keyrings 12] [--no-housing] [--housings 2]
+ *                             [--thickness 6] [--scale one|N] [--margin 40] [--gap 4] [--base] [--no-notes] [--hatch [2.5]] [--dots [3]] [--keyrings 12] [--dogs 1] [--no-housing] [--housings 2]
  *
  * Reads the baked DEM and OSM from havsudden-3d (--data, default
  * ../havsudden-3d/public/data — run `npm run bake` there first). Writes to out/:
@@ -64,7 +64,11 @@ const MARGIN_M = +(args.margin ?? 40);
 // The designed keyring (scripts/keyring-art.mjs makes it from assets/keyring.svg); without the file the keyrings are land-shaped tags.
 const KEYRING_FILE = path.resolve(HERE, args['keyring-art'] ?? 'data/keyring.json');
 const KEYRING_ART = fs.existsSync(KEYRING_FILE) ? JSON.parse(fs.readFileSync(KEYRING_FILE, 'utf8')) : null;
-const BED = { gap: +(args.gap ?? 4), base: 'base' in args, notes: !('no-notes' in args), thick: THICK, keyrings: +(args.keyrings ?? 12), keyringArt: KEYRING_ART, housings: Math.max(1, Math.round(+(args.housings ?? 1))), housing: 'no-housing' in args ? null : housingParts({ thickness: THICK }) };
+// The dog disc (scripts/dog-art.mjs makes data/dog.json from a picture); only used with --dogs N.
+const DOG_FILE = path.resolve(HERE, args['dog-art'] ?? 'data/dog.json');
+const DOG_ART = fs.existsSync(DOG_FILE) ? JSON.parse(fs.readFileSync(DOG_FILE, 'utf8')) : null;
+if (+(args.dogs ?? 0) > 0 && !DOG_ART) throw new Error(`--dogs needs ${DOG_FILE} (node scripts/dog-art.mjs <dog.png>)`);
+const BED = { gap: +(args.gap ?? 4), base: 'base' in args, notes: !('no-notes' in args), thick: THICK, keyrings: +(args.keyrings ?? 12), keyringArt: KEYRING_ART, dogs: Math.max(0, Math.round(+(args.dogs ?? 0))), dogArt: DOG_ART, housings: Math.max(1, Math.round(+(args.housings ?? 1))), housing: 'no-housing' in args ? null : housingParts({ thickness: THICK }) };
 const JOIN = +(args.join ?? 2);
 // Height of the lowest plate's outline (the coast), m. The peninsula goes as low as the smoothed DEM allows.
 const SEA = +(args.sea ?? AREAS[AREA].sea ?? 0.5);
@@ -221,7 +225,7 @@ console.log(`  lines: cut ${(len.cut / 1000).toFixed(1)} m · score ${(len.score
 
 // The page gets the whole smoothed grid (centimetres, Uint16) so any area can be picked.
 const cm = Uint16Array.from(grid, (v) => Math.round(Math.max(0, v) * 100));
-const data = { housings: BED.housings, hatchMM: HATCH_MM, dotsMM: DOTS_MM, keyringArt: KEYRING_ART, W, H, cellM, places, features, rect, seed, join: JOIN, sea: SEA, cut, islets, only: !!mask, plates: PLATES, thick: THICK, scale: SCALE, grid: Buffer.from(cm.buffer).toString('base64') };
+const data = { housings: BED.housings, keyrings: BED.keyrings, dogs: BED.dogs, dogArt: DOG_ART, hatchMM: HATCH_MM, dotsMM: DOTS_MM, keyringArt: KEYRING_ART, W, H, cellM, places, features, rect, seed, join: JOIN, sea: SEA, cut, islets, only: !!mask, plates: PLATES, thick: THICK, scale: SCALE, grid: Buffer.from(cm.buffer).toString('base64') };
 const core = fs.readFileSync(path.join(HERE, 'lib/core.js'), 'utf8').replace(/^export /gm, '');
 // housing.js goes in as a function scope of its own so its helper names can't clash with core's.
 const housingSrc = '(() => {\n' + fs.readFileSync(path.join(HERE, 'lib/housing.js'), 'utf8').replace(/^export /gm, '') + '\nreturn { housingParts, housingInfo, housingModel, HOUSING_DEFAULTS };\n})()';

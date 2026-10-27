@@ -77,6 +77,8 @@
   <label>Gap between pieces <span><input id="gap" type="number" value="4" min="0" step="0.5" style="width:64px"> mm</span><output></output></label>
   <label>Sheet edge margin <span><input id="margin" type="number" value="10" min="0" step="1" style="width:64px"> mm</span><output></output></label>
   <label>Keyrings <span><input id="keyrings" type="number" value="12" min="0" max="60" step="1" style="width:64px"> pcs</span><output></output></label>
+  <label style="grid-template-columns: 20px 1fr"><input id="dogsOn" type="checkbox"> Dog discs (Ø90 mm, with hole) on the sheet</label>
+  <label>Dog discs <span><input id="dogs" type="number" value="1" min="1" max="12" step="1" style="width:64px"> pcs</span><output></output></label>
   <label style="grid-template-columns: 20px 1fr"><input id="housing" type="checkbox" checked> Screen housing parts on the sheet</label>
   <label>Housings <span><input id="housings" type="number" value="1" min="1" max="6" step="1" style="width:64px"> pcs</span><output></output></label>
   <div id="housingInfo" class="hint"></div>
@@ -379,6 +381,7 @@ function stats() {
     ['Sheets needed', `<b>${bed.sheets.length}</b>${bed.tooBig.length ? ` <span class="warn">· too big: ${bed.tooBig.join(', ')}</span>` : ''}`],
     ...(space ? [
       ...(sheetSize().keyrings ? [['Keyrings', `${spaces.reduce((t, x) => t + x.keyrings, 0)} of ${sheetSize().keyrings} fit${spaces.reduce((t, x) => t + x.keyrings, 0) < sheetSize().keyrings ? ' <span class="warn">(no room for the rest)</span>' : ''}`]] : []),
+      ...(sheetSize().dogs ? [['Dog discs', `${spaces.reduce((t, x) => t + x.dogs, 0)} of ${sheetSize().dogs} fit${spaces.reduce((t, x) => t + x.dogs, 0) < sheetSize().dogs ? ' <span class="warn">(no room for the rest)</span>' : ''}`]] : []),
       ['Plywood used by pieces', `${space.materialPct.toFixed(0)}% of the sheet`],
       ['Free for other cuts', `<b>${Math.round(space.free.w)} × ${Math.round(space.free.h)} mm</b> largest block · ${space.freePct.toFixed(0)}% of the sheet${bed.sheets.length > 1 ? ' (last sheet)' : ''}`],
     ] : []),
@@ -543,8 +546,11 @@ $('dlBed').onclick = async () => {
 };
 const num = (id, fallback) => { const v = parseFloat($(id).value); return v >= 0 ? v : fallback; };
 $('housings').value = DATA.housings ?? 1;
-const sheetSize = () => ({ bedW: +$('bedW').value || 1200, bedH: +$('bedH').value || 900, gap: num('gap', 4), margin: num('margin', 10), base: $('incBase').checked, notes: $('notes').checked, thick: state.thick, keyrings: num('keyrings', 12), keyringArt: DATA.keyringArt, housing: $('housing').checked ? housingParts({ thickness: state.thick }) : null, housings: Math.max(1, num('housings', 1)) });
-for (const id of ['bedW', 'bedH', 'gap', 'margin', 'incBase', 'notes', 'keyrings', 'housing', 'housings']) $(id).addEventListener('input', () => stats());
+$('keyrings').value = DATA.keyrings ?? 12;
+$('dogsOn').checked = (DATA.dogs ?? 0) > 0;
+$('dogs').value = DATA.dogs || 1;
+const sheetSize = () => ({ bedW: +$('bedW').value || 1200, bedH: +$('bedH').value || 900, gap: num('gap', 4), margin: num('margin', 10), base: $('incBase').checked, notes: $('notes').checked, thick: state.thick, keyrings: num('keyrings', 12), keyringArt: DATA.keyringArt, dogs: $('dogsOn').checked ? Math.max(1, num('dogs', 1)) : 0, dogArt: DATA.dogArt, housing: $('housing').checked ? housingParts({ thickness: state.thick }) : null, housings: Math.max(1, num('housings', 1)) });
+for (const id of ['bedW', 'bedH', 'gap', 'margin', 'incBase', 'notes', 'keyrings', 'dogsOn', 'dogs', 'housing', 'housings']) $(id).addEventListener('input', () => stats());
 $('dlBedDxf').onclick = async () => {
   const { sheets } = bedSheetsDXF(model, sheetSize());
   for (let k = 0; k < sheets.length; k++) { download(`havsudden-bed-${k + 1}.dxf`, sheets[k]); await new Promise((r) => setTimeout(r, 250)); }

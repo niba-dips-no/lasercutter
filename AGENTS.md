@@ -85,6 +85,10 @@ segments); `lasercut.mjs` passes it to core as `BED.keyringArt` and the page get
 burnt / not burnt, so tone = line density on the one ETCH pen: black → 0.25 mm hatch, ochre → 0.5 mm, cream and white → bare
 wood (the current art is black only; the script also handles strokes). Art stays 0.6 mm off the edge and hole. Without `data/keyring.json` the keyrings fall back to land-shaped tags.
 
+## Dog disc
+
+A Ø90 mm circle with a Ø5.25 mm punch hole at the top (`--hole`, 0 = none; 2.6 mm of wood above it) and with the dog etched on it, opt-in: `--dogs N` on the CLI, "Dog discs" on the page (default 0, so `workshop/` is unchanged). `node scripts/dog-art.mjs <dog.png> [--diameter 90] [--spacing 0.3] [--bold 0.15]` turns black-on-white line art (1/8-bit grayscale PNG) into `data/dog.json`: the dog is centred in its smallest enclosing circle, 4 mm inside the edge, strokes fattened 0.15 mm per side, shrunk further if needed to keep 1 mm off the hole, then 45° hatch on the ETCH pen (~2.8 m, 2100 lines per disc). Source picture was `~/Downloads/dog_lasercut_bw.png`. In the nesting dogs are `fill` items like keyrings but go in first (bigger); a filler shape that finds no room no longer stops the other shapes. Not verified: how the etch looks on plywood (0.3 mm hatch, ~0.6 mm strokes), do a test burn.
+
 ## Housing (lib/housing.js)
 
 The housing parts are on the cutting sheet but carry no H1–H7 labels and the sheet notes don't mention them (the user can puzzle them together); the ids below are for `housing.md` and the 3D tab.

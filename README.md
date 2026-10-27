@@ -21,6 +21,8 @@ quarter turns), then fills what is left with keyrings (the helicopter tag from `
 bought separately and left off the sheet unless you pass `--base`;
 `base-guide.svg` shows where plate 1 goes on it.
 
+`--dogs N` also cuts N Ø90 mm discs (with a hanging hole) with the dog etched on (made from a picture by `node scripts/dog-art.mjs <dog.png>`).
+
 `out/index.html` is the interactive version: pick the area on the map, set the
 plate count, thickness and scale, orbit the stack, download SVGs. It loads
 Three.js from a CDN, so it needs a connection.
